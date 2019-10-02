@@ -15,7 +15,7 @@ class Alchemical_tools(M_matrix):
         coord_type="spherical",
         k=None,
         molgrid=None,
-        conjugate=False,
+        complex=False,
     ):
         """Initialise the Point_charge_perturbation class
 
@@ -36,9 +36,8 @@ class Alchemical_tools(M_matrix):
         molgrid: MolGrid class object (from grid package)  suitable for numerical integration
             of any real space function related to the molecule (such as the density)
             Necessary for any DFT coupling matrices
-        conjugate : Boolean, default is False
-            If true, compute (K)ias,bjt and (K)ias,jbt
-            (K)ias,jbt and (K)ias,bjt can differ only in case of complex MO
+        complex : Bool, default is False
+            If true, considers that MO have complex values
 
         Raises
         ------
@@ -73,21 +72,21 @@ class Alchemical_tools(M_matrix):
         super().__init__(basis, molecule, coord_type=coord_type)
         self._k = k
         self._molgrid = molgrid
-        self._conjugate = conjugate
+        self._complex = complex
         self._M_inv = None
         self._val = point_charges_values
         self._pos = point_charge_positions
+        if complex == True:
+            raise ValueError("""The case of complex MO is not supported foor the alchemical tool""")
 
     @property
     def M_inverse(self):
         if not isinstance(self._M_inv, np.ndarray):
             self._M_inv = self.calculate_M(
-                k=self._k,
-                molgrid=self._molgrid,
-                conjugate=self._conjugate,
-                inverse=True,
+                k=self._k, molgrid=self._molgrid, complex=self._complex, inverse=True
             )
         return self._M_inv
+
 
     def density_matrix_variation(self):
         """Return density matrix variation in MO basis
@@ -111,17 +110,17 @@ class Alchemical_tools(M_matrix):
         indices = self.K_indices()
         dv = np.array(
             [
-                dv[indices[0][0]][:, indices[1][0]].reshape([int(self.M_size / 2)]),
-                dv[indices[0][1]][:, indices[1][1]].reshape([int(self.M_size / 2)]),
+                dv[indices[0][0]][:, indices[1][0]].reshape([self.M_block_size]),
+                dv[indices[0][1]][:, indices[1][1]].reshape([self.M_block_size]),
             ]
-        ).reshape([int(self.M_size)])
+        ).reshape([2*self.M_block_size])
         dP = -np.dot(M_inv, dv)
         dP = np.array(
             [
-                dP[: int(self.M_size / 2)].reshape(
+                dP[: self.M_block_size].reshape(
                     [len(indices[0][0]), len(indices[1][0])]
                 ),
-                dP[int(self.M_size / 2) :].reshape(
+                dP[self.M_block_size :].reshape(
                     [len(indices[0][0]), len(indices[1][0])]
                 ),
             ]
@@ -167,6 +166,6 @@ class Alchemical_tools(M_matrix):
         dE = np.sum(np.diag(dv) * self._molecule.mo.occs)
         dv = np.array(
             [dv[indices[0][0]][:, indices[1][0]], dv[indices[0][1]][:, indices[1][1]]]
-        ).reshape([self.M_size])
+        ).reshape([2 * self.M_block_size])
         dE = np.array([dE, -np.dot(dv[:, None].T, M_inv).dot(dv[:, None])[0, 0]])
         return dE

@@ -9,23 +9,34 @@ class M_matrix(K_matrices):
     """Class for the M matrices"""
 
     @property
-    def M_size(self):
+    def M_block_size(self):
         """Calculate the size of the M matrix
 
         Return
         ------
-        M_size: int"""
-        M_size = self.K_shape(shape="square")[0]
-        return M_size
+        M_block_size: int"""
+        M_block_size = self.K_shape(shape="square")[0]
+        return M_block_size
 
-    def M_s(self):
+    def M_s(self, complex=False):
         """"Calculate the non interacting M matrix
+
+        Parameters
+        ----------
+        complex: bool, default is False
 
         Return
         ------
-        ndarray : Diagonal matrix of shape (M_size, M_size)"""
+        ndarray
+
+        Raises
+        ------
+        TypeError
+            If complex is not a boolean"""
+        if not isinstance(complex, bool):
+            raise TypeError("""'complex' must be a bool""")
         indices = self.K_indices(shape="square")
-        M_s_numpy = np.diag(
+        M_s = np.diag(
             np.array(
                 [
                     (
@@ -37,12 +48,41 @@ class M_matrix(K_matrices):
                         - self._molecule.mo.energies[indices[0][1]]
                     ).T.reshape(len(indices[1][1]) * len(indices[0][1])),
                 ]
-            ).reshape(self.M_size)
+            ).reshape(2*self.M_block_size)
         )
+        if complex == False:
+            return M_s
+        else:
+            return np.block(
+                [
+                    [
+                        M_s[: self.M_block_size, : self.M_block_size],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                    ],
+                    [
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, : self.M_block_size],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                    ],
+                    [
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[self.M_block_size :, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                    ],
+                    [
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[: self.M_block_size, self.M_block_size :],
+                        M_s[self.M_block_size :, self.M_block_size :],
+                    ],
+                ]
+            )
 
-        return M_s_numpy
-
-    def calculate_M(self, k=None, molgrid=None, conjugate=False, inverse=False):
+    def calculate_M(self, k=None, molgrid=None, complex=False, inverse=False):
         """Calculate the M matrix
 
         Parameters
@@ -58,10 +98,8 @@ class M_matrix(K_matrices):
         molgrid: MolGrid class object (from grid package)  suitable for numerical integration
             of any real space function related to the molecule (such as the density)
             Necessary for any DFT coupling matrices
-        conjugate : Boolean, default is False
-            If true compute (K_coulomb)ias,bjt and (K_coulomb)ias,jbt
-            (K_coulomb)ias,jbt and (K_coulomb)ias,bjt can differ only in case of complex MO
-        inverse: Boolean, default is False
+        complex : bool, default is False
+        inverse: bool, default is False
             If True, return the inverse of the matrix M
 
         Return
@@ -74,7 +112,7 @@ class M_matrix(K_matrices):
         TypeError
             If 'k' is not None or a str
             If 'molgrid' is not a 'MolGrid' instance
-            If 'conjugate' is not a bool
+            If 'type' is not a bool
             If 'inverse' is not a bool
         ValueError
             If 'k' is not 'HF' or a supported functional code"""
@@ -82,43 +120,58 @@ class M_matrix(K_matrices):
             raise TypeError("""'k' must be None or a str""")
         if molgrid != None and not isinstance(molgrid, MolGrid):
             raise TypeError("""'molgrid' must be None or a 'MolGrid' instance""")
-        if not isinstance(conjugate, bool):
-            raise TypeError("""'conjugate' must be a bool""")
+        if not isinstance(complex, bool):
+            raise TypeError("""'complex' must be a bool""")
         if not isinstance(inverse, bool):
             raise TypeError("""'inverse' must be a bool""")
         if not k in pylibxc.util.xc_available_functional_names() + ["HF"]:
             raise ValueError(
                 """'k' must be 'HF' of a supported functional code, fro them, see pylibxc.util.xc_available_functional_names() or https://tddft.org/programs/libxc/functionals/"""
             )
-        M = self.M_s()
-        if k == "HF":
-            K = self.K_coulomb() + self.K_fxc_HF()
-            if conjugate == True:
-                M = (
-                    M
-                    + K
-                    + self.K_coulomb(conjugate=True)
-                    + self.K_fxc_HF(conjugate=True)
-                )
-            else:
-                M = M + 2 * K
-        elif isinstance(k, str):
-            K = self.K_coulomb() + self.K_fxc_DFT(XC_functional=k, molgrid=molgrid)
-            if conjugate == True:
-                M = (
-                    M
-                    + K
-                    + self.K_coulomb(conjugate=True)
-                    + self.K_fxc_DFT(XC_functional=k, molgrid=molgrid, conjugate=True)
-                )
-            else:
-                M = M + 2 * K
+        M = self.M_s(complex = complex)
+        b = self.M_block_size
+        if complex == True:
+            if k == "HF":
+                K_1 = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_HF(Type=1, shape='square')
+                K_2 = self.K_coulomb(Type=2, shape = 'square') + self.K_fxc_HF(Type=2, shape='square')
+            elif isinstance(k, str):
+                K_1 = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_DFT(molgrid = molgrid, Type =1, XC_functional=k, shape = 'square')
+                K_2 = self.K_coulomb(Type=2, shape = 'square') + self.K_fxc_DFT(molgrid = molgrid, Type =2, XC_functional=k, shape = 'square')
+            M[0 * b:1 * b, 0 * b:1 * b] = M[0 * b:1 * b, 0 * b:1 * b] + K_1[0]
+            M[0 * b:1 * b, 1 * b:2 * b] = M[0 * b:1 * b, 1 * b:2 * b] + K_2[0]
+            M[0 * b:1 * b, 2 * b:3 * b] = M[0 * b:1 * b, 2 * b:3 * b] + K_1[1]
+            M[0 * b:1 * b, 3 * b:4 * b] = M[0 * b:1 * b, 3 * b:4 * b] + K_2[1]
+
+            M[1 * b:2 * b, 0 * b:1 * b] = M[1 * b:2 * b, 0 * b:1 * b] + K_2[0].conj()
+            M[1 * b:2 * b, 1 * b:2 * b] = M[1 * b:2 * b, 1 * b:2 * b] + K_1[0].conj()
+            M[1 * b:2 * b, 2 * b:3 * b] = M[1 * b:2 * b, 2 * b:3 * b] + K_2[1].conj()
+            M[1 * b:2 * b, 3 * b:4 * b] = M[1 * b:2 * b, 3 * b:4 * b] + K_1[1].conj()
+
+            M[2 * b:3 * b, 0 * b:1 * b] = M[2 * b:3 * b, 0 * b:1 * b] + K_1[2]
+            M[2 * b:3 * b, 1 * b:2 * b] = M[2 * b:3 * b, 1 * b:2 * b] + K_2[2]
+            M[2 * b:3 * b, 2 * b:3 * b] = M[2 * b:3 * b, 2 * b:3 * b] + K_1[3]
+            M[2 * b:3 * b, 3 * b:4 * b] = M[2 * b:3 * b, 3 * b:4 * b] + K_2[3]
+
+            M[3 * b:4 * b, 0 * b:1 * b] = M[3 * b:4 * b, 0 * b:1 * b] + K_2[2].conj()
+            M[3 * b:4 * b, 1 * b:2 * b] = M[3 * b:4 * b, 1 * b:2 * b] + K_1[2].conj()
+            M[3 * b:4 * b, 2 * b:3 * b] = M[3 * b:4 * b, 2 * b:3 * b] + K_2[3].conj()
+            M[3 * b:4 * b, 3 * b:4 * b] = M[3 * b:4 * b, 3 * b:4 * b] + K_1[3].conj()
+        else:
+            if k == "HF":
+                K = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_HF(Type=1, shape='square')
+            elif isinstance(k, str):
+                K = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_DFT(molgrid = molgrid, Type =1, XC_functional=k, shape = 'square')
+            M[0 * b:1 * b, 0 * b:1 * b] = M[0 * b:1 * b, 0 * b:1 * b] + 2 * K[0]
+            M[0 * b:1 * b, 1 * b:2 * b] = M[0 * b:1 * b, 1 * b:2 * b] + 2 * K[1]
+
+            M[1 * b:2 * b, 0 * b:1 * b] = M[0 * b:1 * b, 2 * b:3 * b] + 2 * K[2]
+            M[1 * b:2 * b, 1 * b:2 * b] = M[0 * b:1 * b, 3 * b:4 * b] + 2 * K[3]
         if inverse == True:
             M = la.inv(M)
         return M
 
-    def LR_Excitations(self, k=None, conjugate=False, molgrid=None):
-        """Calculate the excittion energies and the corresponding transition densities
+    def Excitations_energies_real_MO(self, k=None, molgrid=None):
+        """Calculate the excitation energies
 
         Parameters
         ----------
@@ -133,9 +186,6 @@ class M_matrix(K_matrices):
         molgrid: MolGrid class object (from grid package)  suitable for numerical integration
             of any real space function related to the molecule (such as the density)
             Necessary for any DFT coupling matrices
-        conjugate : Boolean, default is False
-            If true calculate (K)ias,bjt and (K)ias,jbt
-            (K)ias,jbt and (K)ias,bjt can differ only in case of complex MO
 
         Return
         ------
@@ -148,43 +198,18 @@ class M_matrix(K_matrices):
         TypeError
             If 'k' is not None or a str
             If 'molgrid' is not a 'MolGrid' instance
-            If 'conjugate' is not a bool
         ValueError
             If 'k' is not 'HF' or a supported functional code"""
         if k != None and not isinstance(k, str):
             raise TypeError("""'k' must be None or a str""")
         if molgrid != None and not isinstance(molgrid, MolGrid):
             raise TypeError("""'molgrid' must be None or a 'MolGrid' instance""")
-        if not isinstance(conjugate, bool):
-            raise TypeError("""'conjugate' must be a bool""")
         if not k in pylibxc.util.xc_available_functional_names() + ["HF"]:
             raise ValueError(
                 """'k' must be 'HF' of a supported functional code, fro them, see pylibxc.util.xc_available_functional_names() or https://tddft.org/programs/libxc/functionals/"""
             )
-        if k == "HF":
-            K_iasjbt = self.K_coulomb() + self.K_fxc_HF()
-            if conjugate == True:
-                K_iasbjt = self.K_coulomb(conjugate=True) + self.K_fxc_HF(
-                    conjugate=True
-                )
-            else:
-                K_iasbjt = K_iasjbt
-        elif isinstance(k, str):
-            K_iasjbt = self.K_coulomb() + self.K_fxc_DFT(
-                XC_functional=k, molgrid=molgrid
-            )
-            if conjugate == True:
-                K_iasbjt = self.K_coulomb(conjugate=True) + self.K_fxc_DFT(
-                    XC_functional=k, molgrid=molgrid, conjugate=True
-                )
-            else:
-                K_iasbjt = K_iasjbt
-        else:
-            K_iasjbt = np.zeros([self.M_size, self.M_size])
-            K_iasbjt = np.zeros([self.M_size, self.M_size])
-
-        Omega = (self.M_s() * self.M_s()) + np.dot(
-            np.sqrt(self.M_s()), K_iasjbt + K_iasbjt
-        ).dot(np.sqrt(self.M_s()))
+        M = self.calculate_M(k = k, molgrid = molgrid)
+        Omega = np.dot(np.sqrt(self.M_s(complex=False)),M).dot(np.sqrt(self.M_s(complex=False)))
         Excitations = la.eigvalsh(Omega)
         return np.sqrt(Excitations)
+()

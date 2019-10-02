@@ -1,6 +1,7 @@
 import numpy as np
 import warnings
 from M_matrix import M_matrix
+from gbasis.evals.eval import evaluate_basis
 
 
 class Response_tools(M_matrix):
@@ -13,7 +14,7 @@ class Response_tools(M_matrix):
         coord_type="spherical",
         k=None,
         molgrid=None,
-        conjugate=False,
+        complex=False,
     ):
         """Initialise the Response tools class
 
@@ -30,32 +31,26 @@ class Response_tools(M_matrix):
         molgrid: MolGrid class object (from grid package)  suitable for numerical integration
             of any real space function related to the molecule (such as the density)
             Necessary for any DFT coupling matrices
-        conjugate : Boolean, default is False
-            If true, compute (K)ias,bjt and (K)ias,jbt
-            (K)ias,jbt and (K)ias,bjt can differ only in case of complex MO
+        Complex : Boolean, default is False
+            If true, consider that MO have complex values
 
         Raises
         ------
         TypeError
             If 'k' is not None or a str
             If 'molgrid' is not a 'MolGrid' instance
-            If 'conjugate' is not a bool
+            If 'complex' is not a bool
         ValueError
             If 'k' is not 'HF' or a supported functional code"""
 
         super().__init__(basis, molecule, coord_type)
         self._k = k
         self._molgrid = molgrid
-        self._conjugate = conjugate
+        self._complex = complex
+        self._basis = basis
+        self._molecule = molecule
+        self._coord_type = coord_type
         self._M_inv = None
-        self._K_l_p_a = None
-        self._K_l_m_a = None
-        self._K_l_p_b = None
-        self._K_l_m_b = None
-        self._K_p_p_a = None
-        self._K_p_m_a = None
-        self._K_p_p_b = None
-        self._K_p_m_b = None
 
     def Frontier_MO_index(self, sign, spin):
         """Return the frontier MO indices
@@ -115,197 +110,53 @@ class Response_tools(M_matrix):
     @property
     def M_inverse(self):
         if not isinstance(self._M_inv, np.ndarray):
-            self._M_inv = self.calculate_M(
-                k=self._k,
-                molgrid=self._molgrid,
-                conjugate=self._conjugate,
-                inverse=True,
+            M = self.calculate_M(
+                k=self._k, molgrid=self._molgrid, complex=self._complex, inverse=True
             )
+            b = self.M_block_size
+            if self._complex == True:
+                self._M_inv = np.array(
+                    [
+                        [
+                            M[0 * b : 1 * b, 0 * b : 1 * b],
+                            M[0 * b : 1 * b, 1 * b : 2 * b],
+                            M[0 * b : 1 * b, 2 * b : 3 * b],
+                            M[0 * b : 1 * b, 3 * b : 4 * b],
+                        ],
+                        [
+                            M[1 * b : 2 * b, 0 * b : 1 * b],
+                            M[1 * b : 2 * b, 1 * b : 2 * b],
+                            M[1 * b : 2 * b, 2 * b : 3 * b],
+                            M[1 * b : 2 * b, 3 * b : 4 * b],
+                        ],
+                        [
+                            M[2 * b : 3 * b, 0 * b : 1 * b],
+                            M[2 * b : 3 * b, 1 * b : 2 * b],
+                            M[2 * b : 3 * b, 2 * b : 3 * b],
+                            M[2 * b : 3 * b, 3 * b : 4 * b],
+                        ],
+                        [
+                            M[3 * b : 4 * b, 0 * b : 1 * b],
+                            M[3 * b : 4 * b, 1 * b : 2 * b],
+                            M[3 * b : 4 * b, 2 * b : 3 * b],
+                            M[3 * b : 4 * b, 3 * b : 4 * b],
+                        ],
+                    ]
+                )
+            else:
+                self._M_inv = np.array(
+                    [
+                        [
+                            M[0 * b : 1 * b, 0 * b : 1 * b],
+                            M[0 * b : 1 * b, 1 * b : 2 * b],
+                        ],
+                        [
+                            M[1 * b : 2 * b, 0 * b : 1 * b],
+                            M[1 * b : 2 * b, 1 * b : 2 * b],
+                        ],
+                    ]
+                )
         return self._M_inv
-
-    @property
-    def K_line_p_a(self):
-        if not isinstance(self._K_l_p_a, np.ndarray):
-            index = self.Frontier_MO_index(sign="plus", spin="alpha")
-            if self._k == "HF":
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_HF(
-                    shape="line", index=index
-                )
-                if self._conjugate == True:
-                    self._K_l_p_a = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_HF(shape="line", index=index, conjugate=True),
-                        ]
-                    )
-                else:
-                    self._K_l_p_a = np.array([K_ffsjbt, K_ffsjbt])
-            elif isinstance(self._k, str):
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_DFT(
-                    XC_functional=self._k,
-                    molgrid=self._molgrid,
-                    shape="line",
-                    index=index,
-                )
-                if self._conjugate == True:
-                    self._K_l_p_a = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_DFT(
-                                XC_functional=self._k,
-                                molgrid=self._molgrid,
-                                shape="line",
-                                index=index,
-                                conjugate=True,
-                            ),
-                        ]
-                    )
-                else:
-                    self._K_l_p_a = np.array([K_ffsjbt, K_ffsjbt])
-            else:
-                K_ffsjbt = np.zeros([1, self.M_size])
-                self._K_l_p_a = np.array([K_ffsjbt, K_ffsjbt])
-        return self._K_l_p_a
-
-    @property
-    def K_line_m_a(self):
-        if not isinstance(self._K_l_m_a, np.ndarray):
-            index = self.Frontier_MO_index(sign="minus", spin="alpha")
-            if self._k == "HF":
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_HF(
-                    shape="line", index=index
-                )
-                if self._conjugate == True:
-                    self._K_l_m_a = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_HF(shape="line", index=index, conjugate=True),
-                        ]
-                    )
-                else:
-                    self._K_l_m_a = np.array([K_ffsjbt, K_ffsjbt])
-            elif isinstance(self._k, str):
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_DFT(
-                    XC_functional=self._k,
-                    molgrid=self._molgrid,
-                    shape="line",
-                    index=index,
-                )
-                if self._conjugate == True:
-                    self._K_l_m_a = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_DFT(
-                                XC_functional=self._k,
-                                molgrid=self._molgrid,
-                                shape="line",
-                                index=index,
-                                conjugate=True,
-                            ),
-                        ]
-                    )
-                else:
-                    self._K_l_m_a = np.array([K_ffsjbt, K_ffsjbt])
-            else:
-                K_ffsjbt = np.zeros([1, self.M_size])
-                self._K_l_m_a = np.array([K_ffsjbt, K_ffsjbt])
-        return self._K_l_m_a
-
-    @property
-    def K_line_p_b(self):
-        if not isinstance(self._K_l_p_b, np.ndarray):
-            index = self.Frontier_MO_index(sign="plus", spin="beta")
-            if self._k == "HF":
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_HF(
-                    shape="line", index=index
-                )
-                if self._conjugate == True:
-                    self._K_l_p_b = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_HF(shape="line", index=index, conjugate=True),
-                        ]
-                    )
-                else:
-                    self._K_l_p_b = np.array([K_ffsjbt, K_ffsjbt])
-            elif isinstance(self._k, str):
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_DFT(
-                    XC_functional=self._k,
-                    molgrid=self._molgrid,
-                    shape="line",
-                    index=index,
-                )
-                if self._conjugate == True:
-                    self._K_l_p_b = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_DFT(
-                                XC_functional=self._k,
-                                molgrid=self._molgrid,
-                                shape="line",
-                                index=index,
-                                conjugate=True,
-                            ),
-                        ]
-                    )
-                else:
-                    self._K_l_p_b = np.array([K_ffsjbt, K_ffsjbt])
-            else:
-                K_ffsjbt = np.zeros([1, self.M_size])
-                self._K_l_p_b = np.array([K_ffsjbt, K_ffsjbt])
-        return self._K_l_p_b
-
-    @property
-    def K_line_m_b(self):
-        if not isinstance(self._K_l_m_b, np.ndarray):
-            index = self.Frontier_MO_index(sign="minus", spin="beta")
-            if self._k == "HF":
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_HF(
-                    shape="line", index=index
-                )
-                if self._conjugate == True:
-                    self._K_l_m_b = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_HF(shape="line", index=index, conjugate=True),
-                        ]
-                    )
-                else:
-                    self._K_l_m_b = np.array([K_ffsjbt, K_ffsjbt])
-            elif isinstance(self._k, str):
-                K_ffsjbt = self.K_coulomb(shape="line", index=index) + self.K_fxc_DFT(
-                    XC_functional=self._k,
-                    molgrid=self._molgrid,
-                    shape="line",
-                    index=index,
-                )
-                if self._conjugate == True:
-                    self._K_l_m_b = np.array(
-                        [
-                            K_ffsjbt,
-                            self.K_coulomb(shape="line", index=index, conjugate=True)
-                            + self.K_fxc_DFT(
-                                XC_functional=self._k,
-                                molgrid=self._molgrid,
-                                shape="line",
-                                index=index,
-                                conjugate=True,
-                            ),
-                        ]
-                    )
-                else:
-                    self._K_l_m_b = np.array([K_ffsjbt, K_ffsjbt])
-            else:
-                K_ffsjbt = np.zeros([1, self.M_size])
-                self._K_l_m_b = np.array([K_ffsjbt, K_ffsjbt])
-        return self._K_l_m_b
 
     def mhu(self, sign, spin):
         """Return the chemical potential
@@ -379,145 +230,335 @@ class Response_tools(M_matrix):
             raise ValueError(
                 """'sign' must be a tuple of two str, being either 'plus' or 'minus'"""
             )
-        index_1 = self.Frontier_MO_index(sign=sign[0], spin=spin[0])
-        index_2 = self.Frontier_MO_index(sign=sign[1], spin=spin[1])
-        index = [index_1[0] + index_2[0], index_1[1] + index_2[1]]
-        if self._k == "HF":
-            k = self.K_coulomb(shape="point", index=index) + self.K_fxc_HF(
-                shape="point", index=index
-            )
-        elif isinstance(self._k, str):
-            k = self.K_coulomb(shape="point", index=index) + self.K_fxc_DFT(
-                XC_functional=self._k, molgrid=self._molgrid, shape="point", index=index
-            )
-        else:
-            k = 0
-        if sign[0] == "plus":
-            if spin[0] == "alpha":
-                if sign[1] == "plus":
+        index_l1_a = self.Frontier_MO_index(sign=sign[0], spin="alpha")
+        index_l1_b = self.Frontier_MO_index(sign=sign[0], spin="beta")
+        index_l2_a = self.Frontier_MO_index(sign=sign[1], spin="alpha")
+        index_l2_b = self.Frontier_MO_index(sign=sign[1], spin="beta")
+        index_pt = [
+            self.Frontier_MO_index(sign=sign[0], spin=spin[0])[0]
+            + self.Frontier_MO_index(sign=sign[1], spin=spin[1])[0],
+            self.Frontier_MO_index(sign=sign[0], spin=spin[0])[1]
+            + self.Frontier_MO_index(sign=sign[1], spin=spin[1])[1],
+        ]
+        M_inv = self.M_inverse
+        if self._complex == True:
+            if self._k == "HF":
+                K_pt = self.K_fxc_HF(
+                    Type=1, shape="point", index=index_pt
+                ) + self.K_coulomb(Type=1, shape="point", index=index_pt)
+                K_l2_1_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l2_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_a)
+                K_l2_1_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l2_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_b)
+                K_l2_2_a = self.K_fxc_HF(
+                    Type=2, shape="line", index=index_l2_a
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l2_a)
+                K_l2_2_b = self.K_fxc_HF(
+                    Type=2, shape="line", index=index_l2_b
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l2_b)
+                K_l1_1_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l1_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_a)
+                K_l1_1_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l1_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_b)
+                K_l1_2_a = self.K_fxc_HF(
+                    Type=2, shape="line", index=index_l1_a
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l1_a)
+                K_l1_2_b = self.K_fxc_HF(
+                    Type=2, shape="line", index=index_l1_b
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l1_b)
+                if spin[0] == "alpha":
                     if spin[1] == "alpha":
                         eta = (
-                            -np.dot(
-                                self.K_line_p_a[0] + self.K_line_p_a[1], self.M_inverse
-                            ).dot(self.K_line_p_a[0].T)
-                            + k
+                            K_pt
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 0])
+                                + K_l2_2_a[0].dot(M_inv[1, 0])
+                                + K_l2_1_b[2].dot(M_inv[2, 0])
+                                + K_l2_2_b[2].dot(M_inv[3, 0])
+                            ).dot(K_l1_2_a[0].T)
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 1])
+                                + K_l2_2_a[0].dot(M_inv[1, 1])
+                                + K_l2_1_b[2].dot(M_inv[2, 1])
+                                + K_l2_2_b[2].dot(M_inv[3, 1])
+                            ).dot(K_l1_1_a[0].T)
                         )
                     else:
                         eta = (
-                            -np.dot(
-                                self.K_line_p_b[0] + self.K_line_p_b[1], self.M_inverse
-                            ).dot(self.K_line_p_a[0].T)
-                            + k
+                            K_pt
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 2])
+                                + K_l2_2_a[1].dot(M_inv[1, 2])
+                                + K_l2_1_b[3].dot(M_inv[2, 2])
+                                + K_l2_2_b[3].dot(M_inv[3, 2])
+                            ).dot(K_l1_2_a[1].T)
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 3])
+                                + K_l2_2_a[1].dot(M_inv[1, 3])
+                                + K_l2_1_b[3].dot(M_inv[2, 3])
+                                + K_l2_2_b[3].dot(M_inv[3, 3])
+                            ).dot(K_l1_1_a[1].T)
                         )
                 else:
                     if spin[1] == "alpha":
                         eta = (
-                            -np.dot(
-                                self.K_line_m_a[0] + self.K_line_m_a[1], self.M_inverse
-                            ).dot(self.K_line_p_a[0].T)
-                            + k
+                            K_pt
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 0])
+                                + K_l2_2_a[0].dot(M_inv[1, 0])
+                                + K_l2_1_b[2].dot(M_inv[2, 0])
+                                + K_l2_2_b[2].dot(M_inv[3, 0])
+                            ).dot(K_l1_2_b[2].T)
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 1])
+                                + K_l2_2_a[0].dot(M_inv[1, 1])
+                                + K_l2_1_b[2].dot(M_inv[2, 1])
+                                + K_l2_2_b[2].dot(M_inv[3, 1])
+                            ).dot(K_l1_1_b[2].T)
                         )
                     else:
                         eta = (
-                            -np.dot(
-                                self.K_line_m_b[0] + self.K_line_m_b[1], self.M_inverse
-                            ).dot(self.K_line_p_a[0].T)
-                            + k
+                            K_pt
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 2])
+                                + K_l2_2_a[1].dot(M_inv[1, 2])
+                                + K_l2_1_b[3].dot(M_inv[2, 2])
+                                + K_l2_2_b[3].dot(M_inv[3, 2])
+                            ).dot(K_l1_2_b[3].T)
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 3])
+                                + K_l2_2_a[1].dot(M_inv[1, 3])
+                                + K_l2_1_b[3].dot(M_inv[2, 3])
+                                + K_l2_2_b[3].dot(M_inv[3, 3])
+                            ).dot(K_l1_1_b[3].T)
+                        )
+            elif isinstance(self._k, str):
+                K_pt = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="point",
+                    index=index_pt,
+                ) + self.K_coulomb(Type=1, shape="point", index=index_pt)
+                K_l2_1_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l2_a,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_a)
+                K_l2_1_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l2_b,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_b)
+                K_l2_2_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=2,
+                    shape="line",
+                    index=index_l2_a,
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l2_a)
+                K_l2_2_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=2,
+                    shape="line",
+                    index=index_l2_b,
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l2_b)
+                K_l1_1_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l1_a,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_a)
+                K_l1_1_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l1_b,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_b)
+                K_l1_2_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=2,
+                    shape="line",
+                    index=index_l1_a,
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l1_a)
+                K_l1_2_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=2,
+                    shape="line",
+                    index=index_l1_b,
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l1_b)
+                if spin[0] == "alpha":
+                    if spin[1] == "alpha":
+                        eta = (
+                            K_pt
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 0])
+                                + K_l2_2_a[0].dot(M_inv[1, 0])
+                                + K_l2_1_b[2].dot(M_inv[2, 0])
+                                + K_l2_2_b[2].dot(M_inv[3, 0])
+                            ).dot(K_l1_2_a[0].T)
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 1])
+                                + K_l2_2_a[0].dot(M_inv[1, 1])
+                                + K_l2_1_b[2].dot(M_inv[2, 1])
+                                + K_l2_2_b[2].dot(M_inv[3, 1])
+                            ).dot(K_l1_1_a[0].T)
+                        )
+                    else:
+                        eta = (
+                            K_pt
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 2])
+                                + K_l2_2_a[1].dot(M_inv[1, 2])
+                                + K_l2_1_b[3].dot(M_inv[2, 2])
+                                + K_l2_2_b[3].dot(M_inv[3, 2])
+                            ).dot(K_l1_2_a[1].T)
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 3])
+                                + K_l2_2_a[1].dot(M_inv[1, 3])
+                                + K_l2_1_b[3].dot(M_inv[2, 3])
+                                + K_l2_2_b[3].dot(M_inv[3, 3])
+                            ).dot(K_l1_1_a[1].T)
+                        )
+                else:
+                    if spin[1] == "alpha":
+                        eta = (
+                            K_pt
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 0])
+                                + K_l2_2_a[0].dot(M_inv[1, 0])
+                                + K_l2_1_b[2].dot(M_inv[2, 0])
+                                + K_l2_2_b[2].dot(M_inv[3, 0])
+                            ).dot(K_l1_2_b[2].T)
+                            - (
+                                K_l2_1_a[0].dot(M_inv[0, 1])
+                                + K_l2_2_a[0].dot(M_inv[1, 1])
+                                + K_l2_1_b[2].dot(M_inv[2, 1])
+                                + K_l2_2_b[2].dot(M_inv[3, 1])
+                            ).dot(K_l1_1_b[2].T)
+                        )
+                    else:
+                        eta = (
+                            K_pt
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 2])
+                                + K_l2_2_a[1].dot(M_inv[1, 2])
+                                + K_l2_1_b[3].dot(M_inv[2, 2])
+                                + K_l2_2_b[3].dot(M_inv[3, 2])
+                            ).dot(K_l1_2_b[3].T)
+                            - (
+                                K_l2_1_a[1].dot(M_inv[0, 3])
+                                + K_l2_2_a[1].dot(M_inv[1, 3])
+                                + K_l2_1_b[3].dot(M_inv[2, 3])
+                                + K_l2_2_b[3].dot(M_inv[3, 3])
+                            ).dot(K_l1_1_b[3].T)
                         )
             else:
-                if sign[1] == "plus":
-                    if spin[1] == "alpha":
-                        eta = (
-                            -np.dot(
-                                self.K_line_p_a[0] + self.K_line_p_a[1], self.M_inverse
-                            ).dot(self.K_line_p_b[0].T)
-                            + k
-                        )
-                    else:
-                        eta = (
-                            -np.dot(
-                                self.K_line_p_b[0] + self.K_line_p_b[1], self.M_inverse
-                            ).dot(self.K_line_p_b[0].T)
-                            + k
-                        )
-                else:
-                    if spin[1] == "alpha":
-                        eta = (
-                            -np.dot(
-                                self.K_line_m_a[0] + self.K_line_m_a[1], self.M_inverse
-                            ).dot(self.K_line_p_b[0].T)
-                            + k
-                        )
-                    else:
-                        eta = (
-                            -np.dot(
-                                self.K_line_m_b[0] + self.K_line_m_b[1], self.M_inverse
-                            ).dot(self.K_line_p_b[0].T)
-                            + k
-                        )
+                eta = None
         else:
-            if spin[0] == "alpha":
-                if sign[1] == "plus":
+            if self._k == "HF":
+                K_pt = self.K_fxc_HF(
+                    Type=1, shape="point", index=index_pt
+                ) + self.K_coulomb(Type=1, shape="point", index=index_pt)
+                K_l2_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l2_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_a)
+                K_l2_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l2_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_b)
+                K_l1_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l1_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_a)
+                K_l1_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l1_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_b)
+                if spin[0] == "alpha":
                     if spin[1] == "alpha":
-                        eta = (
-                            -np.dot(
-                                self.K_line_p_a[0] + self.K_line_p_a[1], self.M_inverse
-                            ).dot(self.K_line_m_a[0].T)
-                            + k
-                        )
+                        eta = K_pt - 2 * (
+                            K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
+                        ).dot(K_l1_a[0])
                     else:
-                        eta = (
-                            -np.dot(
-                                self.K_line_p_b[0] + self.K_line_p_b[1], self.M_inverse
-                            ).dot(self.K_line_m_a[0].T)
-                            + k
-                        )
+                        eta = K_pt - 2 * (
+                            K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
+                        ).dot(K_l1_a[1])
                 else:
                     if spin[1] == "alpha":
-                        eta = (
-                            -np.dot(
-                                self.K_line_m_a[0] + self.K_line_m_a[1], self.M_inverse
-                            ).dot(self.K_line_m_a[0].T)
-                            + k
-                        )
+                        eta = K_pt - 2 * (
+                            K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
+                        ).dot(K_l1_b[2])
                     else:
-                        eta = (
-                            -np.dot(
-                                self.K_line_m_b[0] + self.K_line_m_b[1], self.M_inverse
-                            ).dot(self.K_line_m_a[0].T)
-                            + k
-                        )
+                        eta = K_pt - 2 * (
+                            K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
+                        ).dot(K_l1_b[3])
+            elif isinstance(self._k, str):
+                K_pt = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="point",
+                    index=index_pt,
+                ) + self.K_coulomb(Type=1, shape="point", index=index_pt)
+                K_l2_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l2_a,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_a)
+                K_l2_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l2_b,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l2_b)
+                K_l1_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l1_a,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_a)
+                K_l1_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l1_b,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l1_b)
+                if spin[0] == "alpha":
+                    if spin[1] == "alpha":
+                        eta = K_pt - 2 * (
+                            K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
+                        ).dot(K_l1_a[0])
+                    else:
+                        eta = K_pt - 2 * (
+                            K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
+                        ).dot(K_l1_a[1])
+                else:
+                    if spin[1] == "alpha":
+                        eta = K_pt - 2 * (
+                            K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
+                        ).dot(K_l1_b[2])
+                    else:
+                        eta = K_pt - 2 * (
+                            K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
+                        ).dot(K_l1_b[3])
             else:
-                if sign[1] == "plus":
-                    if spin[1] == "alpha":
-                        eta = (
-                            -np.dot(
-                                self.K_line_p_a[0] + self.K_line_p_a[1], self.M_inverse
-                            ).dot(self.K_line_m_b[0].T)
-                            + k
-                        )
-                    else:
-                        eta = (
-                            -np.dot(
-                                self.K_line_p_b[0] + self.K_line_p_b[1], self.M_inverse
-                            ).dot(self.K_line_m_b[0].T)
-                            + k
-                        )
-                else:
-                    if spin[1] == "alpha":
-                        eta = (
-                            -np.dot(
-                                self.K_line_m_a[0] + self.K_line_m_a[1], self.M_inverse
-                            ).dot(self.K_line_m_b[0].T)
-                            + k
-                        )
-                    else:
-                        eta = (
-                            -np.dot(
-                                self.K_line_m_b[0] + self.K_line_m_b[1], self.M_inverse
-                            ).dot(self.K_line_m_b[0].T)
-                            + k
-                        )
+                eta = None
         return eta
 
     def fukui(self, sign, spin):
@@ -561,92 +602,187 @@ class Response_tools(M_matrix):
             raise TypeError("""'sign' must be 'plus' or 'minus'""")
         if not sign in ["plus", "minus"]:
             raise ValueError("""'sign' must be 'plus' or 'minus'""")
-        if spin[0] == "alpha":
-            if sign == "plus":
-                K_ffsjbt = self.K_line_p_a[0]
-                K_ffsbjt = self.K_line_p_a[1]
-            else:
-                K_ffsjbt = self.K_line_m_a[0]
-                K_ffsbjt = self.K_line_m_a[1]
-        else:
-            if sign == "plus":
-                K_ffsjbt = self.K_line_p_b[0]
-                K_ffsbjt = self.K_line_p_b[1]
-            else:
-                K_ffsjbt = self.K_line_m_b[0]
-                K_ffsbjt = self.K_line_m_b[1]
+        index_l_a = self.Frontier_MO_index(sign=sign[0], spin="alpha")
+        index_l_b = self.Frontier_MO_index(sign=sign[0], spin="beta")
         indices = self.K_indices()
-        a = np.block(
+        M_inv = self.M_inverse
+        if self._complex == True:
+            if self._k == "HF":
+                K_l_1_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_a)
+                K_l_1_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
+                K_l_2_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_a)
+                K_l_2_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
+                if spin[0] == "alpha":
+                    if spin[1] == "alpha":
+                        ab_block = -(
+                            K_l_1_a[0].dot(M_inv[0, 0]) + K_l_2_a[0].dot(M_inv[1, 0])
+                        )
+                        ba_block = -(
+                            K_l_1_a[0].dot(M_inv[0, 1]) + K_l_2_a[0].dot(M_inv[1, 1])
+                        )
+                    else:
+                        ab_block = -(
+                            K_l_1_a[1].dot(M_inv[0, 2]) + K_l_2_a[1].dot(M_inv[1, 2])
+                        )
+                        ba_block = -(
+                            K_l_1_a[1].dot(M_inv[0, 3]) + K_l_2_a[1].dot(M_inv[1, 3])
+                        )
+                else:
+                    if spin[1] == "alpha":
+                        ab_block = -(
+                            K_l_1_b[0].dot(M_inv[2, 0]) + K_l_2_b[0].dot(M_inv[3, 0])
+                        )
+                        ba_block = -(
+                            K_l_1_b[0].dot(M_inv[2, 1]) + K_l_2_b[0].dot(M_inv[3, 1])
+                        )
+                    else:
+                        ab_block = -(
+                            K_l_1_b[1].dot(M_inv[2, 2]) + K_l_2_b[1].dot(M_inv[3, 2])
+                        )
+                        ba_block = -(
+                            K_l_1_b[1].dot(M_inv[2, 3]) + K_l_2_b[1].dot(M_inv[3, 3])
+                        )
+            elif isinstance(self._k, str):
+                K_l_1_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l_a,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_a)
+                K_l_1_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l_b,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
+                K_l_2_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=2,
+                    shape="line",
+                    index=index_l_a,
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l_a)
+                K_l_2_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=2,
+                    shape="line",
+                    index=index_l_b,
+                ) + self.K_coulomb(Type=2, shape="line", index=index_l_b)
+                if spin[0] == "alpha":
+                    if spin[1] == "alpha":
+                        ab_block = -(
+                            K_l_1_a[0].dot(M_inv[0, 0]) + K_l_2_a[0].dot(M_inv[1, 0])
+                        )
+                        ba_block = -(
+                            K_l_1_a[0].dot(M_inv[0, 1]) + K_l_2_a[0].dot(M_inv[1, 1])
+                        )
+                    else:
+                        ab_block = -(
+                            K_l_1_a[1].dot(M_inv[0, 2]) + K_l_2_a[1].dot(M_inv[1, 2])
+                        )
+                        ba_block = -(
+                            K_l_1_a[1].dot(M_inv[0, 3]) + K_l_2_a[1].dot(M_inv[1, 3])
+                        )
+                else:
+                    if spin[1] == "alpha":
+                        ab_block = -(
+                            K_l_1_b[0].dot(M_inv[2, 0]) + K_l_2_b[0].dot(M_inv[3, 0])
+                        )
+                        ba_block = -(
+                            K_l_1_b[0].dot(M_inv[2, 1]) + K_l_2_b[0].dot(M_inv[3, 1])
+                        )
+                    else:
+                        ab_block = -(
+                            K_l_1_b[1].dot(M_inv[2, 2]) + K_l_2_b[1].dot(M_inv[3, 2])
+                        )
+                        ba_block = -(
+                            K_l_1_b[1].dot(M_inv[2, 3]) + K_l_2_b[1].dot(M_inv[3, 3])
+                        )
+            else:
+                ab_block = np.zeros([len(indices[0][0]), len(indices[1][0])])
+                ba_block = np.zeros([len(indices[1][0]), len(indices[0][0])])
+        else:
+            if self._k == "HF":
+                K_l_a = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l_a
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_a)
+                K_l_b = self.K_fxc_HF(
+                    Type=1, shape="line", index=index_l_b
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
+                if spin[0] == "alpha":
+                    if spin[1] == "alpha":
+                        ab_block = -K_l_a[0].dot(M_inv[0, 0])
+                    else:
+                        ab_block = -K_l_a[1].dot(M_inv[0, 1])
+                else:
+                    if spin[1] == "alpha":
+                        ab_block = -K_l_b[0].dot(M_inv[1, 0])
+                    else:
+                        ab_block = -K_l_b[1].dot(M_inv[1, 1])
+                ba_block = ab_block.T
+            elif isinstance(self._k, str):
+                K_l_a = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l_a,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_a)
+                K_l_b = self.K_fxc_DFT(
+                    XC_functional=self._k,
+                    molgrid=self._molgrid,
+                    Type=1,
+                    shape="line",
+                    index=index_l_b,
+                ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
+                if spin[0] == "alpha":
+                    if spin[1] == "alpha":
+                        ab_block = -K_l_a[0].dot(M_inv[0, 0])
+                    else:
+                        ab_block = -K_l_a[1].dot(M_inv[0, 1])
+                else:
+                    if spin[1] == "alpha":
+                        ab_block = -K_l_b[0].dot(M_inv[1, 0])
+                    else:
+                        ab_block = -K_l_b[1].dot(M_inv[1, 1])
+                ba_block = ab_block.T
+            else:
+                ab_block = np.zeros([len(indices[0][0]), len(indices[1][0])])
+                ba_block = ab_block.T
+        fukui = np.block(
             [
-                [
-                    np.zeros([len(indices[0][0]), len(indices[0][0])]),
-                    (
-                        np.dot(K_ffsjbt + K_ffsbjt, self.M_inverse)[
-                            :, : int(self.M_size / 2)
-                        ]
-                    ).reshape([len(indices[0][0]), len(indices[1][0])]),
-                ],
-                [
-                    (
-                        np.dot(K_ffsjbt + K_ffsbjt, self.M_inverse)[
-                            :, : int(self.M_size / 2)
-                        ]
-                    ).reshape([len(indices[1][0]), len(indices[0][0])]),
-                    np.zeros([len(indices[1][0]), len(indices[1][0])]),
-                ],
+                [np.zeros([len(indices[0][0]), len(indices[0][0])]), ab_block],
+                [ba_block, np.zeros([len(indices[1][0]), len(indices[1][0])])],
             ]
         )
-        b = np.block(
-            [
-                [
-                    np.zeros([len(indices[0][0]), len(indices[0][0])]),
-                    (
-                        np.dot(K_ffsjbt + K_ffsbjt, self.M_inverse)[
-                            :, int(self.M_size / 2) :
-                        ]
-                    ).reshape([len(indices[0][0]), len(indices[1][0])]),
-                ],
-                [
-                    (
-                        np.dot(K_ffsjbt + K_ffsbjt, self.M_inverse)[
-                            :, int(self.M_size / 2) :
-                        ]
-                    ).reshape([len(indices[1][0]), len(indices[0][0])]),
-                    np.zeros([len(indices[1][0]), len(indices[1][0])]),
-                ],
-            ]
-        )
-        fukui = np.array([a, b])
-        if spin[0] == "alpha":
-            fukui[
-                0,
-                self.Frontier_MO_index(sign=sign, spin="alpha")[0],
-                self.Frontier_MO_index(sign=sign, spin="alpha")[0],
-            ] = 1
-        else:
-            fukui[
-                1,
-                self.Frontier_MO_index(sign=sign, spin="beta")[1][0]
-                - self._molecule.mo.nbasis,
-                self.Frontier_MO_index(sign=sign, spin="beta")[1][0]
-                - self._molecule.mo.nbasis,
-            ] = 1
-        if spin[1] == "alpha":
-            return fukui[0]
-        else:
-            return fukui[1]
+        return fukui
 
-    def linear_response(self, spin):
+    def evaluate_linear_response(self, spin, r1, r2):
         """Return linear response matrices
 
         Parameters
         ----------
         spin: tuple of two str,
             elements can only be 'alpha' or 'beta'
+        r1: ndarray
+            N1 coordinates
+        r2: ndarray
+            N2 coordiantes
 
         Return
         ------
-        linear_response: np.ndarray"""
+        linear_response: np.ndarray of shape [N1, N2]"""
         if not isinstance(spin, tuple):
             raise TypeError(
                 """'spin' must be a tuple of two str, being either 'alpha' or 'beta'"""
@@ -663,20 +799,107 @@ class Response_tools(M_matrix):
             raise ValueError(
                 """'spin' must be a tuple of two str, being either 'alpha' or 'beta'"""
             )
-        Mat = -2 * self.M_inverse
-        linear_response = np.array(
-            [
-                Mat[: int(self.M_size / 2)][:, : int(self.M_size / 2)],
-                Mat[: int(self.M_size / 2)][:, int(self.M_size / 2) :],
-                Mat[int(self.M_size / 2) :][:, : int(self.M_size / 2)],
-                Mat[int(self.M_size / 2) :][:, int(self.M_size / 2) :],
-            ]
+        if not isinstance(r1, np.ndarray):
+            raise TypeError("""'r1' must be a np.ndarray""")
+        if len(r1.shape) != 2:
+            raise ValueError("""'r1' must be a np.ndarray with shape (N, 3)""")
+        if r1.shape[1] != 3:
+            raise ValueError("""'r1' must be a np.ndarray with shape (N, 3)""")
+        if not isinstance(r2, np.ndarray):
+            raise TypeError("""'r1' must be a np.ndarray""")
+        if len(r2.shape) != 2:
+            raise ValueError("""'r2' must be a np.ndarray with shape (N, 3)""")
+        if r1.shape[1] != 3:
+            raise ValueError("""'r2' must be a np.ndarray with shape (N, 3)""")
+        indices = self.K_indices()
+        MO_r1 = evaluate_basis(
+            self._basis,
+            r1,
+            transform=self._molecule.mo.coeffs.T,
+            coord_type=self._coord_type,
         )
-        if spin == ("alpha", "alpha"):
-            return linear_response[0]
-        elif spin == ("alpha", "beta"):
-            return linear_response[1]
-        elif spin == ("beta", "alpha"):
-            return linear_response[2]
+        MO_r2 = evaluate_basis(
+            self._basis,
+            r2,
+            transform=self._molecule.mo.coeffs.T,
+            coord_type=self._coord_type,
+        )
+        a_occ_r1 = MO_r1[indices[0][0]]
+        a_occ_r2 = MO_r2[indices[0][0]]
+        b_occ_r1 = MO_r1[indices[0][1]]
+        b_occ_r2 = MO_r2[indices[0][1]]
+        a_virt_r1 = MO_r1[indices[1][0]]
+        a_virt_r2 = MO_r2[indices[1][0]]
+        b_virt_r1 = MO_r1[indices[1][1]]
+        b_virt_r2 = MO_r2[indices[1][1]]
+        del (MO_r1, MO_r2)
+        phi_a_r1 = a_occ_r1[:, None, :] * a_virt_r1[None, :, :]
+        phi_a_r1 = phi_a_r1.reshape(
+            phi_a_r1.shape[0] * phi_a_r1.shape[1], phi_a_r1.shape[2]
+        )
+        phi_a_r2 = a_occ_r2[:, None, :] * a_virt_r2[None, :, :]
+        phi_a_r2 = phi_a_r2.reshape(
+            phi_a_r2.shape[0] * phi_a_r2.shape[1], phi_a_r2.shape[2]
+        )
+        del (a_occ_r1, a_occ_r2, a_virt_r1, a_virt_r2)
+        phi_b_r1 = b_occ_r1[:, None, :] * b_virt_r1[None, :, :]
+        phi_b_r1 = phi_b_r1.reshape(
+            phi_b_r1.shape[0] * phi_b_r1.shape[1], phi_b_r1.shape[2]
+        )
+        phi_b_r2 = b_occ_r2[:, None, :] * b_virt_r2[None, :, :]
+        phi_b_r2 = phi_b_r2.reshape(
+            phi_b_r2.shape[0] * phi_b_r2.shape[1], phi_b_r2.shape[2]
+        )
+        del (b_occ_r1, b_occ_r2, b_virt_r1, b_virt_r2)
+        M_inv = self.M_inverse
+        if self._complex == True:
+            if spin[0] == "alpha":
+                if spin[1] == "alpha":
+                    linear_response = (
+                        np.dot(phi_a_r1.conj().T, M_inv[0, 0]).dot(phi_a_r2)
+                        + np.dot(phi_a_r1.conj().T, M_inv[0, 1]).dot(phi_a_r2.conj())
+                        + np.dot(phi_a_r1.T, M_inv[1, 0]).dot(phi_a_r2)
+                        + np.dot(phi_a_r1.T, M_inv[1, 1]).dot(phi_a_r2.conj())
+                    )
+                else:
+                    linear_response = (
+                        np.dot(phi_a_r1.conj().T, M_inv[0, 2]).dot(phi_b_r2)
+                        + np.dot(phi_a_r1.conj().T, M_inv[0, 3]).dot(phi_b_r2.conj())
+                        + np.dot(phi_a_r1.T, M_inv[1, 2]).dot(phi_b_r2)
+                        + np.dot(phi_a_r1.T, M_inv[1, 3]).dot(phi_b_r2.conj())
+                    )
+            else:
+                if spin[1] == "alpha":
+                    linear_response = (
+                        np.dot(phi_b_r1.conj().T, M_inv[2, 0]).dot(phi_a_r2)
+                        + np.dot(phi_b_r1.conj().T, M_inv[2, 1]).dot(phi_a_r2.conj())
+                        + np.dot(phi_b_r1.T, M_inv[3, 0]).dot(phi_a_r2)
+                        + np.dot(phi_b_r1.T, M_inv[3, 1]).dot(phi_a_r2.conj())
+                    )
+                else:
+                    linear_response = (
+                        np.dot(phi_b_r1.conj().T, M_inv[2, 2]).dot(phi_b_r2)
+                        + np.dot(phi_b_r1.conj().T, M_inv[2, 3]).dot(phi_b_r2.conj())
+                        + np.dot(phi_b_r1.T, M_inv[3, 2]).dot(phi_b_r2)
+                        + np.dot(phi_b_r1.T, M_inv[3, 3]).dot(phi_b_r2.conj())
+                    )
         else:
-            return linear_response[3]
+            if spin[0] == "alpha":
+                if spin[1] == "alpha":
+                    linear_response = -2 * (
+                        np.dot(phi_a_r1.T, M_inv[0, 0]).dot(phi_a_r2)
+                    )
+                else:
+                    linear_response = -2 * (
+                        np.dot(phi_a_r1.T, M_inv[0, 1]).dot(phi_b_r2)
+                    )
+            else:
+                if spin[1] == "alpha":
+                    linear_response = -2 * (
+                        np.dot(phi_b_r1.T, M_inv[1, 0]).dot(phi_a_r2)
+                    )
+                else:
+                    linear_response = -2 * (
+                        np.dot(phi_b_r1.T, M_inv[1, 1]).dot(phi_b_r2)
+                    )
+        return linear_response
