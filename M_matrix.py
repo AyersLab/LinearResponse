@@ -48,7 +48,7 @@ class M_matrix(K_matrices):
                         - self._molecule.mo.energies[indices[0][1]]
                     ).T.reshape(len(indices[1][1]) * len(indices[0][1])),
                 ]
-            ).reshape(2*self.M_block_size)
+            ).reshape(2 * self.M_block_size)
         )
         if complex == False:
             return M_s
@@ -128,44 +128,72 @@ class M_matrix(K_matrices):
             raise ValueError(
                 """'k' must be 'HF' of a supported functional code, fro them, see pylibxc.util.xc_available_functional_names() or https://tddft.org/programs/libxc/functionals/"""
             )
-        M = self.M_s(complex = complex)
+        M = self.M_s(complex=complex)
         b = self.M_block_size
         if complex == True:
             if k == "HF":
-                K_1 = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_HF(Type=1, shape='square')
-                K_2 = self.K_coulomb(Type=2, shape = 'square') + self.K_fxc_HF(Type=2, shape='square')
+                K_1 = self.K_coulomb(Type=1, shape="square") + self.K_fxc_HF(
+                    Type=1, shape="square"
+                )
+                K_2 = self.K_coulomb(Type=2, shape="square") + self.K_fxc_HF(
+                    Type=2, shape="square"
+                )
             elif isinstance(k, str):
-                K_1 = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_DFT(molgrid = molgrid, Type =1, XC_functional=k, shape = 'square')
-                K_2 = self.K_coulomb(Type=2, shape = 'square') + self.K_fxc_DFT(molgrid = molgrid, Type =2, XC_functional=k, shape = 'square')
-            M[0 * b:1 * b, 0 * b:1 * b] = M[0 * b:1 * b, 0 * b:1 * b] + K_1[0]
-            M[0 * b:1 * b, 1 * b:2 * b] = M[0 * b:1 * b, 1 * b:2 * b] + K_2[0]
-            M[0 * b:1 * b, 2 * b:3 * b] = M[0 * b:1 * b, 2 * b:3 * b] + K_1[1]
-            M[0 * b:1 * b, 3 * b:4 * b] = M[0 * b:1 * b, 3 * b:4 * b] + K_2[1]
+                K_1 = self.K_coulomb(Type=1, shape="square") + self.K_fxc_DFT(
+                    molgrid=molgrid, Type=1, XC_functional=k, shape="square"
+                )
+                K_2 = self.K_coulomb(Type=2, shape="square") + self.K_fxc_DFT(
+                    molgrid=molgrid, Type=2, XC_functional=k, shape="square"
+                )
+            M[0 * b : 1 * b, 0 * b : 1 * b] = M[0 * b : 1 * b, 0 * b : 1 * b] + K_1[0]
+            M[0 * b : 1 * b, 1 * b : 2 * b] = M[0 * b : 1 * b, 1 * b : 2 * b] + K_2[0]
+            M[0 * b : 1 * b, 2 * b : 3 * b] = M[0 * b : 1 * b, 2 * b : 3 * b] + K_1[1]
+            M[0 * b : 1 * b, 3 * b : 4 * b] = M[0 * b : 1 * b, 3 * b : 4 * b] + K_2[1]
 
-            M[1 * b:2 * b, 0 * b:1 * b] = M[1 * b:2 * b, 0 * b:1 * b] + K_2[0].conj()
-            M[1 * b:2 * b, 1 * b:2 * b] = M[1 * b:2 * b, 1 * b:2 * b] + K_1[0].conj()
-            M[1 * b:2 * b, 2 * b:3 * b] = M[1 * b:2 * b, 2 * b:3 * b] + K_2[1].conj()
-            M[1 * b:2 * b, 3 * b:4 * b] = M[1 * b:2 * b, 3 * b:4 * b] + K_1[1].conj()
+            M[1 * b : 2 * b, 0 * b : 1 * b] = (
+                M[1 * b : 2 * b, 0 * b : 1 * b] + K_2[0].conj()
+            )
+            M[1 * b : 2 * b, 1 * b : 2 * b] = (
+                M[1 * b : 2 * b, 1 * b : 2 * b] + K_1[0].conj()
+            )
+            M[1 * b : 2 * b, 2 * b : 3 * b] = (
+                M[1 * b : 2 * b, 2 * b : 3 * b] + K_2[1].conj()
+            )
+            M[1 * b : 2 * b, 3 * b : 4 * b] = (
+                M[1 * b : 2 * b, 3 * b : 4 * b] + K_1[1].conj()
+            )
 
-            M[2 * b:3 * b, 0 * b:1 * b] = M[2 * b:3 * b, 0 * b:1 * b] + K_1[2]
-            M[2 * b:3 * b, 1 * b:2 * b] = M[2 * b:3 * b, 1 * b:2 * b] + K_2[2]
-            M[2 * b:3 * b, 2 * b:3 * b] = M[2 * b:3 * b, 2 * b:3 * b] + K_1[3]
-            M[2 * b:3 * b, 3 * b:4 * b] = M[2 * b:3 * b, 3 * b:4 * b] + K_2[3]
+            M[2 * b : 3 * b, 0 * b : 1 * b] = M[2 * b : 3 * b, 0 * b : 1 * b] + K_1[2]
+            M[2 * b : 3 * b, 1 * b : 2 * b] = M[2 * b : 3 * b, 1 * b : 2 * b] + K_2[2]
+            M[2 * b : 3 * b, 2 * b : 3 * b] = M[2 * b : 3 * b, 2 * b : 3 * b] + K_1[3]
+            M[2 * b : 3 * b, 3 * b : 4 * b] = M[2 * b : 3 * b, 3 * b : 4 * b] + K_2[3]
 
-            M[3 * b:4 * b, 0 * b:1 * b] = M[3 * b:4 * b, 0 * b:1 * b] + K_2[2].conj()
-            M[3 * b:4 * b, 1 * b:2 * b] = M[3 * b:4 * b, 1 * b:2 * b] + K_1[2].conj()
-            M[3 * b:4 * b, 2 * b:3 * b] = M[3 * b:4 * b, 2 * b:3 * b] + K_2[3].conj()
-            M[3 * b:4 * b, 3 * b:4 * b] = M[3 * b:4 * b, 3 * b:4 * b] + K_1[3].conj()
+            M[3 * b : 4 * b, 0 * b : 1 * b] = (
+                M[3 * b : 4 * b, 0 * b : 1 * b] + K_2[2].conj()
+            )
+            M[3 * b : 4 * b, 1 * b : 2 * b] = (
+                M[3 * b : 4 * b, 1 * b : 2 * b] + K_1[2].conj()
+            )
+            M[3 * b : 4 * b, 2 * b : 3 * b] = (
+                M[3 * b : 4 * b, 2 * b : 3 * b] + K_2[3].conj()
+            )
+            M[3 * b : 4 * b, 3 * b : 4 * b] = (
+                M[3 * b : 4 * b, 3 * b : 4 * b] + K_1[3].conj()
+            )
         else:
             if k == "HF":
-                K = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_HF(Type=1, shape='square')
+                K = self.K_coulomb(Type=1, shape="square") + self.K_fxc_HF(
+                    Type=1, shape="square"
+                )
             elif isinstance(k, str):
-                K = self.K_coulomb(Type=1, shape = 'square') + self.K_fxc_DFT(molgrid = molgrid, Type =1, XC_functional=k, shape = 'square')
-            M[0 * b:1 * b, 0 * b:1 * b] = M[0 * b:1 * b, 0 * b:1 * b] + 2 * K[0]
-            M[0 * b:1 * b, 1 * b:2 * b] = M[0 * b:1 * b, 1 * b:2 * b] + 2 * K[1]
+                K = self.K_coulomb(Type=1, shape="square") + self.K_fxc_DFT(
+                    molgrid=molgrid, Type=1, XC_functional=k, shape="square"
+                )
+            M[0 * b : 1 * b, 0 * b : 1 * b] = M[0 * b : 1 * b, 0 * b : 1 * b] + 2 * K[0]
+            M[0 * b : 1 * b, 1 * b : 2 * b] = M[0 * b : 1 * b, 1 * b : 2 * b] + 2 * K[1]
 
-            M[1 * b:2 * b, 0 * b:1 * b] = M[0 * b:1 * b, 2 * b:3 * b] + 2 * K[2]
-            M[1 * b:2 * b, 1 * b:2 * b] = M[0 * b:1 * b, 3 * b:4 * b] + 2 * K[3]
+            M[1 * b : 2 * b, 0 * b : 1 * b] = M[1 * b : 2 * b, 0 * b : 1 * b] + 2 * K[2]
+            M[1 * b : 2 * b, 1 * b : 2 * b] = M[1 * b : 2 * b, 1 * b : 2 * b] + 2 * K[3]
         if inverse == True:
             M = la.inv(M)
         return M
@@ -208,8 +236,9 @@ class M_matrix(K_matrices):
             raise ValueError(
                 """'k' must be 'HF' of a supported functional code, fro them, see pylibxc.util.xc_available_functional_names() or https://tddft.org/programs/libxc/functionals/"""
             )
-        M = self.calculate_M(k = k, molgrid = molgrid)
-        Omega = np.dot(np.sqrt(self.M_s(complex=False)),M).dot(np.sqrt(self.M_s(complex=False)))
+        M = self.calculate_M(k=k, molgrid=molgrid)
+        Omega = np.dot(np.sqrt(self.M_s(complex=False)), M).dot(
+            np.sqrt(self.M_s(complex=False))
+        )
         Excitations = la.eigvalsh(Omega)
         return np.sqrt(Excitations)
-()

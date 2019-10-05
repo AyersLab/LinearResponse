@@ -77,7 +77,9 @@ class Alchemical_tools(M_matrix):
         self._val = point_charges_values
         self._pos = point_charge_positions
         if complex == True:
-            raise ValueError("""The case of complex MO is not supported foor the alchemical tool""")
+            raise ValueError(
+                """The case of complex MO is not supported foor the alchemical tool"""
+            )
 
     @property
     def M_inverse(self):
@@ -86,7 +88,6 @@ class Alchemical_tools(M_matrix):
                 k=self._k, molgrid=self._molgrid, complex=self._complex, inverse=True
             )
         return self._M_inv
-
 
     def density_matrix_variation(self):
         """Return density matrix variation in MO basis
@@ -113,7 +114,7 @@ class Alchemical_tools(M_matrix):
                 dv[indices[0][0]][:, indices[1][0]].reshape([self.M_block_size]),
                 dv[indices[0][1]][:, indices[1][1]].reshape([self.M_block_size]),
             ]
-        ).reshape([2*self.M_block_size])
+        ).reshape([2 * self.M_block_size])
         dP = -np.dot(M_inv, dv)
         dP = np.array(
             [

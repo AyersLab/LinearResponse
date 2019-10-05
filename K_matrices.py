@@ -303,7 +303,7 @@ class K_matrices:
         Return
         ------
         K_coulomb: ndarray
-            shape = [aa_block, ab_block, ba_block,bb_block] if shape ==  'square' or 'line'
+            shape = [aa_block, ab_block, ba_block, bb_block] if shape ==  'square' or 'line'
             shape = [1, 1] if shape == 'point'
 
         Raises
@@ -313,16 +313,15 @@ class K_matrices:
         ValueError
             If 'Type' is not in [1,2]"""
         if not isinstance(Type, int):
-            raise TypeError("""'type' must be 1 or 2""")
+            raise TypeError("""'Type' must be 1 or 2""")
         if not Type in [1, 2]:
-            raise ValueError("""'type' must be 1 or 2""")
+            raise ValueError("""'Type' must be 1 or 2""")
         indices = self.K_indices(shape=shape, index=index)
         two_electron_int = self.two_electron_integrals
         if Type == 1:
             p, q = 1, 0
         else:
             p, q = 0, 1
-
         if shape == "square":
             two_electron_int = two_electron_int[indices[0][0] + indices[0][1]][
                 :, indices[1][0] + indices[1][1]
@@ -331,7 +330,10 @@ class K_matrices:
             ]
             aa_block = two_electron_int[: len(indices[0][0])][:, : len(indices[1][0])][
                 :, :, : len(indices[p][0])
-            ][:, :, :, : len(indices[q][0])].reshape(
+            ][:, :, :, : len(indices[q][0])]
+            if Type == 1:
+                aa_block = aa_block.transpose(0, 1, 3, 2)
+            aa_block = aa_block.reshape(
                 [
                     len(indices[0][0]) * len(indices[1][0]),
                     len(indices[p][0]) * len(indices[q][0]),
@@ -339,15 +341,21 @@ class K_matrices:
             )
             ab_block = two_electron_int[: len(indices[0][0])][:, : len(indices[1][0])][
                 :, :, len(indices[p][0]) :
-            ][:, :, :, len(indices[q][0]) :].reshape(
+            ][:, :, :, len(indices[q][0]) :]
+            if Type == 1:
+                ab_block = ab_block.transpose(0, 1, 3, 2)
+            ab_block = ab_block.reshape(
                 [
                     len(indices[0][0]) * len(indices[1][0]),
                     len(indices[p][1]) * len(indices[q][1]),
                 ]
             )
             ba_block = two_electron_int[: len(indices[0][0])][:, : len(indices[1][0])][
-                :, :, len(indices[p][0]) :
-            ][:, :, :, len(indices[q][0]) :].reshape(
+                :, :, : len(indices[p][0])
+            ][:, :, :, : len(indices[q][0])]
+            if Type == 1:
+                ba_block = ba_block.transpose(0, 1, 3, 2)
+            ba_block = ba_block.reshape(
                 [
                     len(indices[0][1]) * len(indices[1][1]),
                     len(indices[p][0]) * len(indices[q][0]),
@@ -355,7 +363,10 @@ class K_matrices:
             )
             bb_block = two_electron_int[len(indices[0][0]) :][:, len(indices[1][0]) :][
                 :, :, len(indices[p][0]) :
-            ][:, :, :, len(indices[q][0]) :].reshape(
+            ][:, :, :, len(indices[q][0]) :]
+            if Type == 1:
+                bb_block = bb_block.transpose(0, 1, 3, 2)
+            bb_block = bb_block.reshape(
                 [
                     len(indices[0][1]) * len(indices[1][1]),
                     len(indices[p][1]) * len(indices[q][1]),
@@ -369,41 +380,45 @@ class K_matrices:
             ][:, :, indices[p][0] + indices[p][1]][
                 :, :, :, indices[q][0] + indices[q][1]
             ]
-            aa_block = (
-                np.diagonal(
-                    two_electron_int[: len(indices[2][0])][:, : len(indices[2][0])][
-                        :, :, : len(indices[p][0])
-                    ][:, :, :, : len(indices[q][0])]
-                )
-                .transpose(2, 0, 1)
-                .reshape([len(indices[2][0]), len(indices[p][0]) * len(indices[q][0])])
+            aa_block = np.diagonal(
+                two_electron_int[: len(indices[2][0])][:, : len(indices[2][0])][
+                    :, :, : len(indices[p][0])
+                ][:, :, :, : len(indices[q][0])]
+            ).transpose(2, 0, 1)
+            if Type == 1:
+                aa_block = aa_block.transpose(0, 2, 1)
+            aa_block = aa_block.reshape(
+                [len(indices[2][0]), len(indices[p][0]) * len(indices[q][0])]
             )
-            ab_block = (
-                np.diagonal(
-                    two_electron_int[: len(indices[2][0])][:, : len(indices[2][0])][
-                        :, :, : len(indices[p][1])
-                    ][:, :, :, : len(indices[q][1])]
-                )
-                .transpose(2, 0, 1)
-                .reshape([len(indices[2][0]), len(indices[p][1]) * len(indices[q][1])])
+            ab_block = np.diagonal(
+                two_electron_int[: len(indices[2][0])][:, : len(indices[2][0])][
+                    :, :, len(indices[p][0]) :
+                ][:, :, :, len(indices[q][0]) :]
+            ).transpose(2, 0, 1)
+            if Type == 1:
+                ab_block = ab_block.transpose(0, 2, 1)
+            ab_block = ab_block.reshape(
+                [len(indices[2][0]), len(indices[p][1]) * len(indices[q][1])]
             )
-            ba_block = (
-                np.diagonal(
-                    two_electron_int[len(indices[2][0]) :][:, len(indices[2][0]) :][
-                        :, :, len(indices[p][0]) :
-                    ][:, :, :, len(indices[q][0]) :]
-                )
-                .transpose(2, 0, 1)
-                .reshape([len(indices[2][1]), len(indices[p][0]) * len(indices[q][0])])
+            ba_block = np.diagonal(
+                two_electron_int[len(indices[2][0]) :][:, len(indices[2][0]) :][
+                    :, :, : len(indices[p][0])
+                ][:, :, :, : len(indices[q][0])]
+            ).transpose(2, 0, 1)
+            if Type == 1:
+                ba_block = ba_block.transpose(0, 2, 1)
+            ba_block = ba_block.reshape(
+                [len(indices[2][1]), len(indices[p][0]) * len(indices[q][0])]
             )
-            bb_block = (
-                np.diagonal(
-                    two_electron_int[len(indices[2][0]) :][:, len(indices[2][0]) :][
-                        :, :, len(indices[p][0]) :
-                    ][:, :, :, len(indices[q][0]) :]
-                )
-                .transpose(2, 0, 1)
-                .reshape([len(indices[2][1]), len(indices[p][1]) * len(indices[q][1])])
+            bb_block = np.diagonal(
+                two_electron_int[len(indices[2][0]) :][:, len(indices[2][0]) :][
+                    :, :, len(indices[p][0]) :
+                ][:, :, :, len(indices[q][0]) :]
+            ).transpose(2, 0, 1)
+            if Type == 1:
+                bb_block = bb_block.transpose(0, 2, 1)
+            bb_block = bb_block.reshape(
+                [len(indices[2][1]), len(indices[p][1]) * len(indices[q][1])]
             )
             K_coulomb = np.array([aa_block, ab_block, ba_block, bb_block])
             return K_coulomb
@@ -448,7 +463,7 @@ class K_matrices:
         if not isinstance(Type, int):
             raise TypeError("""'Type' must be 1 or 2""")
         if not Type in [1, 2]:
-            raise ValueError("""'type' must be 1 or 2""")
+            raise ValueError("""'Type' must be 1 or 2""")
         indices = self.K_indices(shape=shape, index=index)
         if Type == 1:
             p, q = 1, 0
@@ -465,7 +480,10 @@ class K_matrices:
             ]
             aa_block = two_electron_int[: len(indices[0][0])][:, : len(indices[1][0])][
                 :, :, : len(indices[p][0])
-            ][:, :, :, : len(indices[q][0])].reshape(
+            ][:, :, :, : len(indices[q][0])]
+            if Type == 1:
+                aa_block = aa_block.transpose(0, 1, 3, 2)
+            aa_block = aa_block.reshape(
                 [
                     len(indices[0][0]) * len(indices[1][0]),
                     len(indices[p][0]) * len(indices[q][0]),
@@ -485,7 +503,10 @@ class K_matrices:
             )
             bb_block = two_electron_int[len(indices[0][0]) :][:, len(indices[1][0]) :][
                 :, :, len(indices[p][0]) :
-            ][:, :, :, len(indices[q][0]) :].reshape(
+            ][:, :, :, len(indices[q][0]) :]
+            if Type == 1:
+                bb_block = bb_block.transpose(0, 1, 3, 2)
+            bb_block = bb_block.reshape(
                 [
                     len(indices[0][1]) * len(indices[1][1]),
                     len(indices[p][1]) * len(indices[q][1]),
@@ -499,14 +520,15 @@ class K_matrices:
             ][:, :, indices[p][0] + indices[p][1]][
                 :, :, :, indices[q][0] + indices[q][1]
             ]
-            aa_block = (
-                np.diagonal(
-                    two_electron_int[: len(indices[2][0])][:, : len(indices[2][0])][
-                        :, :, : len(indices[p][0])
-                    ][:, :, :, : len(indices[q][0])]
-                )
-                .transpose(2, 0, 1)
-                .reshape([len(indices[2][0]), len(indices[p][0]) * len(indices[q][0])])
+            aa_block = np.diagonal(
+                two_electron_int[: len(indices[2][0])][:, : len(indices[2][0])][
+                    :, :, : len(indices[p][0])
+                ][:, :, :, : len(indices[q][0])]
+            ).transpose(2, 0, 1)
+            if Type == 1:
+                aa_block = aa_block.transpose(0, 2, 1)
+            aa_block = aa_block.reshape(
+                [len(indices[2][0]), len(indices[p][0]) * len(indices[q][0])]
             )
             ab_block = np.zeros(
                 [len(indices[2][0]), len(indices[p][1]) * len(indices[q][1])]
@@ -514,14 +536,15 @@ class K_matrices:
             ba_block = np.zeros(
                 [len(indices[2][1]), len(indices[p][0]) * len(indices[q][0])]
             )
-            bb_block = (
-                np.diagonal(
-                    two_electron_int[len(indices[2][0]) :][:, len(indices[2][0]) :][
-                        :, :, len(indices[p][0]) :
-                    ][:, :, :, len(indices[q][0]) :]
-                )
-                .transpose(2, 0, 1)
-                .reshape([len(indices[2][1]), len(indices[p][1]) * len(indices[q][1])])
+            bb_block = np.diagonal(
+                two_electron_int[len(indices[2][0]) :][:, len(indices[2][0]) :][
+                    :, :, len(indices[p][0]) :
+                ][:, :, :, len(indices[q][0]) :]
+            ).transpose(2, 0, 1)
+            if Type == 1:
+                bb_block = bb_block.transpose(0, 2, 1)
+            bb_block = bb_block.reshape(
+                [len(indices[2][1]), len(indices[p][1]) * len(indices[q][1])]
             )
             K_fxc_HF = (-1) * np.array([aa_block, ab_block, ba_block, bb_block])
             return K_fxc_HF
@@ -580,9 +603,9 @@ class K_matrices:
         if not isinstance(molgrid, MolGrid):
             raise TypeError("""'molgrid' must be a 'MolGrid' instance""")
         if not isinstance(Type, int):
-            raise TypeError("""'type' must be 1 or 2""")
+            raise TypeError("""'Type' must be 1 or 2""")
         if not Type in [1, 2]:
-            raise ValueError("""'type' must be 1 or 2""")
+            raise ValueError("""'Type' must be 1 or 2""")
         if not isinstance(XC_functional, str):
             raise TypeError("""'XC_functional' must be a str""")
         if not XC_functional in pylibxc.util.xc_available_functional_names():
@@ -610,7 +633,6 @@ class K_matrices:
         b_density_values = evaluate_density(
             b_dm, self._basis, molgrid.points, coord_type=self._coord_type
         )
-        xc_function = pylibxc.LibXCFunctional(XC_functional, "polarized")
         inp = {"rho": np.array([a_density_values, b_density_values])}
         inp["rho"] = inp["rho"].transpose().reshape(len(inp["rho"][0]) * 2)
         if xc_function.get_family() == 2:
@@ -686,13 +708,13 @@ class K_matrices:
                 * f_xc_values[0]
                 * molgrid.weights
             )
-            # generate the alpha-beta block
+            # generate the beta-alpha block
             K_fxc_DFT[ij_a.shape[0] :, : kl_a.shape[0]] = (
                 K_fxc_DFT[ij_a.shape[0] :, : kl_a.shape[0]]
                 * f_xc_values[1]
                 * molgrid.weights
             )
-            # generate the beta-alpha block
+            # generate the alpha-beta block
             K_fxc_DFT[: ij_a.shape[0], kl_a.shape[0] :] = (
                 K_fxc_DFT[: ij_a.shape[0], kl_a.shape[0] :]
                 * f_xc_values[1]
@@ -709,8 +731,8 @@ class K_matrices:
             K_fxc_DFt = np.array(
                 [
                     K_fxc_DFT[: ij_a.shape[0], : kl_a.shape[0]],
-                    K_fxc_DFT[ij_a.shape[0] :, : kl_a.shape[0]],
                     K_fxc_DFT[: ij_a.shape[0], kl_a.shape[0] :],
+                    K_fxc_DFT[ij_a.shape[0] :, : kl_a.shape[0]],
                     K_fxc_DFT[ij_a.shape[0] :, kl_a.shape[0] :],
                 ]
             )

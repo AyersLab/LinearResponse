@@ -32,27 +32,26 @@ for i in range(len(molecule.atnums)):
         AtomicGrid.special_init(rad_grid, radii[i], degs=[deg], scales=[])
     ]
 molgrid = MolGrid(molecule_at_grid, molecule.atnums)
+occupied_ind = [[], []]
+virtual_ind = [[], []]
+for i in range(len(molecule.mo.occsa)):
+    if molecule.mo.occsa[i] - 1 == 0:
+        occupied_ind[0] = occupied_ind[0] + [i]
+    if molecule.mo.occsa[i] == 0:
+        virtual_ind[0] = virtual_ind[0] + [i]
+for i in range(len(molecule.mo.occsb)):
+    if molecule.mo.occsb[i] - 1 == 0:
+        occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
+    if molecule.mo.occsb[i] == 0:
+        virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
+indices = (occupied_ind, virtual_ind)
 
 
-def test_M_matrix_M_size():
-    assert M_mat.M_size == 140
+def test_M_matrix_M_block_size():
+    assert M_mat.M_block_size == 70
 
 
 def test_M_matrix_M_s():
-
-    occupied_ind = [[], []]
-    virtual_ind = [[], []]
-    for i in range(len(molecule.mo.occsa)):
-        if molecule.mo.occsa[i] - 1 == 0:
-            occupied_ind[0] = occupied_ind[0] + [i]
-        if molecule.mo.occsa[i] == 0:
-            virtual_ind[0] = virtual_ind[0] + [i]
-    for i in range(len(molecule.mo.occsb)):
-        if molecule.mo.occsb[i] - 1 == 0:
-            occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
-        if molecule.mo.occsb[i] == 0:
-            virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
-    indices = (occupied_ind, virtual_ind)
     M_s = np.zeros([140, 140], float)
     for s in range(2):
         for i_c, i in enumerate(indices[0][s]):
@@ -166,8 +165,10 @@ def test_M_matrix_calculate_M():
                                     + molecule.mo.energies[a]
                                     - molecule.mo.energies[i]
                                 )
-    assert np.allclose(M_mat.calculate_M(k="HF"), M_HF)
-    assert np.allclose(M_mat.calculate_M(k="lda_x", molgrid=molgrid), M_LDA)
+    assert np.allclose(M_mat.calculate_M(k="HF", complex=False), M_HF)
+    assert np.allclose(
+        M_mat.calculate_M(k="lda_x", complex=False, molgrid=molgrid), M_LDA
+    )
 
 
 def test_M_matrix_LR_Excitations():
@@ -459,8 +460,10 @@ def test_M_matrix_LR_Excitations():
             22.52518481,
         ]
     )
-    assert np.allclose(M_mat.LR_Excitations(k="HF"), E_hf)
-    assert np.allclose(M_mat.LR_Excitations(k="lda_x", molgrid=molgrid), E_lda)
+    assert np.allclose(M_mat.Excitations_energies_real_MO(k="HF"), E_hf)
+    assert np.allclose(
+        M_mat.Excitations_energies_real_MO(k="lda_x", molgrid=molgrid), E_lda
+    )
 
 
 def test_M_matrix_raise_calculate_M():
@@ -471,8 +474,8 @@ def test_M_matrix_raise_calculate_M():
         M_ma = M_mat.calculate_M(k="lda_x", molgrid=1)
     assert str(error.value) == """'molgrid' must be None or a 'MolGrid' instance"""
     with pytest.raises(TypeError) as error:
-        M_ma = M_mat.calculate_M(k="lda_x", molgrid=molgrid, conjugate=1)
-    assert str(error.value) == """'conjugate' must be a bool"""
+        M_ma = M_mat.calculate_M(k="lda_x", molgrid=molgrid, complex=1)
+    assert str(error.value) == """'complex' must be a bool"""
     with pytest.raises(TypeError) as error:
         M_ma = M_mat.calculate_M(k="lda_x", molgrid=molgrid, inverse=1)
     assert str(error.value) == """'inverse' must be a bool"""
@@ -484,18 +487,15 @@ def test_M_matrix_raise_calculate_M():
     )
 
 
-def test_M_matrix_raise_LR_Excitations():
+def test_M_matrix_raise_Excitations_energies_real_MO():
     with pytest.raises(TypeError) as error:
-        Ene = M_mat.LR_Excitations(k=1)
+        Ene = M_mat.Excitations_energies_real_MO(k=1)
     assert str(error.value) == """'k' must be None or a str"""
     with pytest.raises(TypeError) as error:
-        Ene = M_mat.LR_Excitations(k="lda_x", molgrid=1)
+        Ene = M_mat.Excitations_energies_real_MO(k="lda_x", molgrid=1)
     assert str(error.value) == """'molgrid' must be None or a 'MolGrid' instance"""
-    with pytest.raises(TypeError) as error:
-        Ene = M_mat.LR_Excitations(k="lda_x", molgrid=molgrid, conjugate=1)
-    assert str(error.value) == """'conjugate' must be a bool"""
     with pytest.raises(ValueError) as error:
-        Ene = M_mat.LR_Excitations(k="abcd", molgrid=molgrid)
+        Ene = M_mat.Excitations_energies_real_MO(k="abcd", molgrid=molgrid)
     assert (
         str(error.value)
         == """'k' must be 'HF' of a supported functional code, fro them, see pylibxc.util.xc_available_functional_names() or https://tddft.org/programs/libxc/functionals/"""

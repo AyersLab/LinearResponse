@@ -489,20 +489,20 @@ class Response_tools(M_matrix):
                     if spin[1] == "alpha":
                         eta = K_pt - 2 * (
                             K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
-                        ).dot(K_l1_a[0])
+                        ).dot(K_l1_a[0].T)
                     else:
                         eta = K_pt - 2 * (
                             K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
-                        ).dot(K_l1_a[1])
+                        ).dot(K_l1_a[1].T)
                 else:
                     if spin[1] == "alpha":
                         eta = K_pt - 2 * (
                             K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
-                        ).dot(K_l1_b[2])
+                        ).dot(K_l1_b[2].T)
                     else:
                         eta = K_pt - 2 * (
                             K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
-                        ).dot(K_l1_b[3])
+                        ).dot(K_l1_b[3].T)
             elif isinstance(self._k, str):
                 K_pt = self.K_fxc_DFT(
                     XC_functional=self._k,
@@ -543,20 +543,20 @@ class Response_tools(M_matrix):
                     if spin[1] == "alpha":
                         eta = K_pt - 2 * (
                             K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
-                        ).dot(K_l1_a[0])
+                        ).dot(K_l1_a[0].T)
                     else:
                         eta = K_pt - 2 * (
                             K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
-                        ).dot(K_l1_a[1])
+                        ).dot(K_l1_a[1].T)
                 else:
                     if spin[1] == "alpha":
                         eta = K_pt - 2 * (
                             K_l2_a[0].dot(M_inv[0, 0]) + K_l2_b[2].dot(M_inv[1, 0])
-                        ).dot(K_l1_b[2])
+                        ).dot(K_l1_b[2].T)
                     else:
                         eta = K_pt - 2 * (
                             K_l2_a[1].dot(M_inv[0, 1]) + K_l2_b[3].dot(M_inv[1, 1])
-                        ).dot(K_l1_b[3])
+                        ).dot(K_l1_b[3].T)
             else:
                 eta = None
         return eta
@@ -602,8 +602,8 @@ class Response_tools(M_matrix):
             raise TypeError("""'sign' must be 'plus' or 'minus'""")
         if not sign in ["plus", "minus"]:
             raise ValueError("""'sign' must be 'plus' or 'minus'""")
-        index_l_a = self.Frontier_MO_index(sign=sign[0], spin="alpha")
-        index_l_b = self.Frontier_MO_index(sign=sign[0], spin="beta")
+        index_l_a = self.Frontier_MO_index(sign=sign, spin="alpha")
+        index_l_b = self.Frontier_MO_index(sign=sign, spin="beta")
         indices = self.K_indices()
         M_inv = self.M_inverse
         if self._complex == True:
@@ -624,31 +624,39 @@ class Response_tools(M_matrix):
                     if spin[1] == "alpha":
                         ab_block = -(
                             K_l_1_a[0].dot(M_inv[0, 0]) + K_l_2_a[0].dot(M_inv[1, 0])
-                        )
-                        ba_block = -(
-                            K_l_1_a[0].dot(M_inv[0, 1]) + K_l_2_a[0].dot(M_inv[1, 1])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_a[0].dot(M_inv[0, 1]) + K_l_2_a[0].dot(M_inv[1, 1]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
                     else:
                         ab_block = -(
                             K_l_1_a[1].dot(M_inv[0, 2]) + K_l_2_a[1].dot(M_inv[1, 2])
-                        )
-                        ba_block = -(
-                            K_l_1_a[1].dot(M_inv[0, 3]) + K_l_2_a[1].dot(M_inv[1, 3])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_a[1].dot(M_inv[0, 3]) + K_l_2_a[1].dot(M_inv[1, 3]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
                 else:
                     if spin[1] == "alpha":
                         ab_block = -(
-                            K_l_1_b[0].dot(M_inv[2, 0]) + K_l_2_b[0].dot(M_inv[3, 0])
-                        )
-                        ba_block = -(
-                            K_l_1_b[0].dot(M_inv[2, 1]) + K_l_2_b[0].dot(M_inv[3, 1])
+                            K_l_1_b[2].dot(M_inv[2, 0]) + K_l_2_b[2].dot(M_inv[3, 0])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_b[2].dot(M_inv[2, 1]) + K_l_2_b[2].dot(M_inv[3, 1]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
                     else:
                         ab_block = -(
-                            K_l_1_b[1].dot(M_inv[2, 2]) + K_l_2_b[1].dot(M_inv[3, 2])
-                        )
-                        ba_block = -(
-                            K_l_1_b[1].dot(M_inv[2, 3]) + K_l_2_b[1].dot(M_inv[3, 3])
+                            K_l_1_b[3].dot(M_inv[2, 2]) + K_l_2_b[3].dot(M_inv[3, 2])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_b[3].dot(M_inv[2, 3]) + K_l_2_b[3].dot(M_inv[3, 3]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
             elif isinstance(self._k, str):
                 K_l_1_a = self.K_fxc_DFT(
@@ -683,31 +691,39 @@ class Response_tools(M_matrix):
                     if spin[1] == "alpha":
                         ab_block = -(
                             K_l_1_a[0].dot(M_inv[0, 0]) + K_l_2_a[0].dot(M_inv[1, 0])
-                        )
-                        ba_block = -(
-                            K_l_1_a[0].dot(M_inv[0, 1]) + K_l_2_a[0].dot(M_inv[1, 1])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_a[0].dot(M_inv[0, 1]) + K_l_2_a[0].dot(M_inv[1, 1]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
                     else:
                         ab_block = -(
                             K_l_1_a[1].dot(M_inv[0, 2]) + K_l_2_a[1].dot(M_inv[1, 2])
-                        )
-                        ba_block = -(
-                            K_l_1_a[1].dot(M_inv[0, 3]) + K_l_2_a[1].dot(M_inv[1, 3])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_a[1].dot(M_inv[0, 3]) + K_l_2_a[1].dot(M_inv[1, 3]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
                 else:
                     if spin[1] == "alpha":
                         ab_block = -(
-                            K_l_1_b[0].dot(M_inv[2, 0]) + K_l_2_b[0].dot(M_inv[3, 0])
-                        )
-                        ba_block = -(
-                            K_l_1_b[0].dot(M_inv[2, 1]) + K_l_2_b[0].dot(M_inv[3, 1])
+                            K_l_1_b[2].dot(M_inv[2, 0]) + K_l_2_b[2].dot(M_inv[3, 0])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_b[2].dot(M_inv[2, 1]) + K_l_2_b[2].dot(M_inv[3, 1]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
                     else:
                         ab_block = -(
-                            K_l_1_b[1].dot(M_inv[2, 2]) + K_l_2_b[1].dot(M_inv[3, 2])
-                        )
-                        ba_block = -(
-                            K_l_1_b[1].dot(M_inv[2, 3]) + K_l_2_b[1].dot(M_inv[3, 3])
+                            K_l_1_b[3].dot(M_inv[2, 2]) + K_l_2_b[3].dot(M_inv[3, 2])
+                        ).reshape([len(indices[0][0]), len(indices[1][0])])
+                        ba_block = (
+                            -(K_l_1_b[3].dot(M_inv[2, 3]) + K_l_2_b[3].dot(M_inv[3, 3]))
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                            .T
                         )
             else:
                 ab_block = np.zeros([len(indices[0][0]), len(indices[1][0])])
@@ -722,14 +738,30 @@ class Response_tools(M_matrix):
                 ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
                 if spin[0] == "alpha":
                     if spin[1] == "alpha":
-                        ab_block = -K_l_a[0].dot(M_inv[0, 0])
+                        ab_block = (
+                            -K_l_a[0]
+                            .dot(M_inv[0, 0])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                     else:
-                        ab_block = -K_l_a[1].dot(M_inv[0, 1])
+                        ab_block = (
+                            -K_l_a[1]
+                            .dot(M_inv[0, 1])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                 else:
                     if spin[1] == "alpha":
-                        ab_block = -K_l_b[0].dot(M_inv[1, 0])
+                        ab_block = (
+                            -K_l_b[2]
+                            .dot(M_inv[1, 0])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                     else:
-                        ab_block = -K_l_b[1].dot(M_inv[1, 1])
+                        ab_block = (
+                            -K_l_b[3]
+                            .dot(M_inv[1, 1])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                 ba_block = ab_block.T
             elif isinstance(self._k, str):
                 K_l_a = self.K_fxc_DFT(
@@ -748,14 +780,30 @@ class Response_tools(M_matrix):
                 ) + self.K_coulomb(Type=1, shape="line", index=index_l_b)
                 if spin[0] == "alpha":
                     if spin[1] == "alpha":
-                        ab_block = -K_l_a[0].dot(M_inv[0, 0])
+                        ab_block = (
+                            -K_l_a[0]
+                            .dot(M_inv[0, 0])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                     else:
-                        ab_block = -K_l_a[1].dot(M_inv[0, 1])
+                        ab_block = (
+                            -K_l_a[1]
+                            .dot(M_inv[0, 1])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                 else:
                     if spin[1] == "alpha":
-                        ab_block = -K_l_b[0].dot(M_inv[1, 0])
+                        ab_block = (
+                            -K_l_b[2]
+                            .dot(M_inv[1, 0])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                     else:
-                        ab_block = -K_l_b[1].dot(M_inv[1, 1])
+                        ab_block = (
+                            -K_l_b[3]
+                            .dot(M_inv[1, 1])
+                            .reshape([len(indices[0][0]), len(indices[1][0])])
+                        )
                 ba_block = ab_block.T
             else:
                 ab_block = np.zeros([len(indices[0][0]), len(indices[1][0])])
@@ -766,9 +814,16 @@ class Response_tools(M_matrix):
                 [ba_block, np.zeros([len(indices[1][0]), len(indices[1][0])])],
             ]
         )
+        if spin[0] == spin[1] == "alpha":
+            fukui[index_l_a[0][0], index_l_a[0][0]] = 1
+        if spin[0] == spin[1] == "beta":
+            fukui[
+                index_l_b[1][0] - self._molecule.mo.nbasis,
+                index_l_b[1][0] - self._molecule.mo.nbasis,
+            ] = 1
         return fukui
 
-    def evaluate_linear_response(self, spin, r1, r2):
+    def evaluate_linear_response(self, r1, r2, spin):
         """Return linear response matrices
 
         Parameters
@@ -806,10 +861,10 @@ class Response_tools(M_matrix):
         if r1.shape[1] != 3:
             raise ValueError("""'r1' must be a np.ndarray with shape (N, 3)""")
         if not isinstance(r2, np.ndarray):
-            raise TypeError("""'r1' must be a np.ndarray""")
+            raise TypeError("""'r2' must be a np.ndarray""")
         if len(r2.shape) != 2:
             raise ValueError("""'r2' must be a np.ndarray with shape (N, 3)""")
-        if r1.shape[1] != 3:
+        if r2.shape[1] != 3:
             raise ValueError("""'r2' must be a np.ndarray with shape (N, 3)""")
         indices = self.K_indices()
         MO_r1 = evaluate_basis(

@@ -34,22 +34,21 @@ for i in range(len(molecule.atnums)):
         AtomicGrid.special_init(rad_grid, radii[i], degs=[deg], scales=[])
     ]
 molgrid = MolGrid(molecule_at_grid, molecule.atnums)
+occupied_ind = [[], []]
+virtual_ind = [[], []]
+for i in range(len(molecule.mo.occsa)):
+    if molecule.mo.occsa[i] - 1 == 0:
+        occupied_ind[0] = occupied_ind[0] + [i]
+    if molecule.mo.occsa[i] == 0:
+        virtual_ind[0] = virtual_ind[0] + [i]
+for i in range(len(molecule.mo.occsb)):
+    if molecule.mo.occsb[i] - 1 == 0:
+        occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
+    if molecule.mo.occsb[i] == 0:
+        virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
 
 
 def test_K_matrices_K_indices():
-
-    occupied_ind = [[], []]
-    virtual_ind = [[], []]
-    for i in range(len(molecule.mo.occsa)):
-        if molecule.mo.occsa[i] - 1 == 0:
-            occupied_ind[0] = occupied_ind[0] + [i]
-        if molecule.mo.occsa[i] == 0:
-            virtual_ind[0] = virtual_ind[0] + [i]
-    for i in range(len(molecule.mo.occsb)):
-        if molecule.mo.occsb[i] - 1 == 0:
-            occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
-        if molecule.mo.occsb[i] == 0:
-            virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
     shape = "square"
     index = None
     assert K_mats.K_indices(shape=shape, index=index) == (occupied_ind, virtual_ind)
@@ -70,24 +69,9 @@ def test_K_matrices_K_indices():
 
 
 def test_K_matrices_K_shape():
-
-    occupied_ind = [[], []]
-    virtual_ind = [[], []]
-    for i in range(len(molecule.mo.occsa)):
-        if molecule.mo.occsa[i] - 1 == 0:
-            occupied_ind[0] = occupied_ind[0] + [i]
-        if molecule.mo.occsa[i] == 0:
-            virtual_ind[0] = virtual_ind[0] + [i]
-    for i in range(len(molecule.mo.occsb)):
-        if molecule.mo.occsb[i] - 1 == 0:
-            occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
-        if molecule.mo.occsb[i] == 0:
-            virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
     shape = "square"
     index = None
-    K_size = len(occupied_ind[0]) * len(virtual_ind[0]) + len(occupied_ind[1]) * len(
-        virtual_ind[1]
-    )
+    K_size = len(occupied_ind[0]) * len(virtual_ind[0])
     assert_allclose(K_mats.K_shape(shape=shape, index=index), [K_size, K_size])
     shape = "line"
     index = [[4], []]
@@ -98,19 +82,6 @@ def test_K_matrices_K_shape():
 
 
 def test_K_matrices_K_coulomb():
-
-    occupied_ind = [[], []]
-    virtual_ind = [[], []]
-    for i in range(len(molecule.mo.occsa)):
-        if molecule.mo.occsa[i] - 1 == 0:
-            occupied_ind[0] = occupied_ind[0] + [i]
-        if molecule.mo.occsa[i] == 0:
-            virtual_ind[0] = virtual_ind[0] + [i]
-    for i in range(len(molecule.mo.occsb)):
-        if molecule.mo.occsb[i] - 1 == 0:
-            occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
-        if molecule.mo.occsb[i] == 0:
-            virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
     indices = (occupied_ind, virtual_ind)
     K_size = len(occupied_ind[0]) * len(virtual_ind[0]) + len(occupied_ind[1]) * len(
         virtual_ind[1]
@@ -136,7 +107,15 @@ def test_K_matrices_K_coulomb():
                             K_coulomb[ias][jbt] = (
                                 K_coulomb[ias][jbt] + two_electron_int[i, a, j, b]
                             )
-    assert np.allclose(K_mats.K_coulomb(), K_coulomb)
+    K_c = np.array(
+        [
+            K_coulomb[:70, :70],
+            K_coulomb[:70, 70:],
+            K_coulomb[70:, :70],
+            K_coulomb[70:, 70:],
+        ]
+    )
+    assert np.allclose(K_mats.K_coulomb(shape="square", Type=1), K_c)
     K_shape = [1, K_size]
     K_coulomb = np.zeros(K_shape, float)
     index = [[4], []]
@@ -155,26 +134,17 @@ def test_K_matrices_K_coulomb():
                         K_coulomb[ffs][jbt] = (
                             K_coulomb[ffs][jbt] + two_electron_int[f, f, j, b]
                         )
-    assert np.allclose(K_mats.K_coulomb(shape="line", index=index), K_coulomb)
+    K_coulomb_0 = K_mats.K_coulomb(shape="line", index=index, Type=2)
+    assert np.allclose(K_coulomb_0[0], K_coulomb[0, :70])
+    assert np.allclose(K_coulomb_0[1], K_coulomb[0, 70:])
+    assert np.allclose(K_coulomb_0[2], np.zeros([0, 70]))
+    assert np.allclose(K_coulomb_0[3], np.zeros([0, 70]))
     l = [4, 24]
     K_coulomb = two_electron_int[l[0], l[0], l[1], l[1]]
     assert np.allclose(K_mats.K_coulomb(shape="point", index=[[4], [24]]), K_coulomb)
 
 
 def test_K_matrices_K_fxc_HF():
-
-    occupied_ind = [[], []]
-    virtual_ind = [[], []]
-    for i in range(len(molecule.mo.occsa)):
-        if molecule.mo.occsa[i] - 1 == 0:
-            occupied_ind[0] = occupied_ind[0] + [i]
-        if molecule.mo.occsa[i] == 0:
-            virtual_ind[0] = virtual_ind[0] + [i]
-    for i in range(len(molecule.mo.occsb)):
-        if molecule.mo.occsb[i] - 1 == 0:
-            occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
-        if molecule.mo.occsb[i] == 0:
-            virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
     indices = (occupied_ind, virtual_ind)
     K_size = len(occupied_ind[0]) * len(virtual_ind[0]) + len(occupied_ind[1]) * len(
         virtual_ind[1]
@@ -201,7 +171,15 @@ def test_K_matrices_K_fxc_HF():
                                 K_fxc_HF[ias][jbt] = (
                                     K_fxc_HF[ias][jbt] - two_electron_int[i, a, j, b]
                                 )
-    assert np.allclose(K_mats.K_fxc_HF(), K_fxc_HF)
+    K_fxc_H = np.array(
+        [
+            K_fxc_HF[0:70, 0:70],
+            K_fxc_HF[0:70, 70:140],
+            K_fxc_HF[70:140, 0:70],
+            K_fxc_HF[70:140, 70:140],
+        ]
+    )
+    assert np.allclose(K_mats.K_fxc_HF(Type=2, shape="square"), K_fxc_H)
     K_shape = [1, K_size]
     K_fxc_HF = np.zeros(K_shape, float)
     index = [[4], []]
@@ -221,8 +199,12 @@ def test_K_matrices_K_fxc_HF():
                             K_fxc_HF[ffs][jbt] = (
                                 K_fxc_HF[ffs][jbt] - two_electron_int[f, f, j, b]
                             )
-    assert np.allclose(K_mats.K_fxc_HF(shape="line", index=index), K_fxc_HF)
-    K_shape = [1, 1]
+
+    K_fxc_HF_0 = K_mats.K_fxc_HF(Type=2, shape="line", index=index)
+    assert np.allclose(K_fxc_HF_0[0], K_fxc_HF[0, :70])
+    assert np.allclose(K_fxc_HF_0[1], K_fxc_HF[0, 70:])
+    assert np.allclose(K_fxc_HF_0[2], np.zeros([0, 70]))
+    assert np.allclose(K_fxc_HF_0[3], np.zeros([0, 70]))
     l = [4, 4]
     K_fxc_HF = -two_electron_int[l[0], l[0], l[1], l[1]]
     assert np.allclose(K_mats.K_fxc_HF(shape="point", index=[[4, 4], []]), K_fxc_HF)
@@ -256,18 +238,6 @@ def test_K_matrices_K_fxc_DFT():
     )
     MO_values_conjugated = np.conjugate(MO_values)
 
-    occupied_ind = [[], []]
-    virtual_ind = [[], []]
-    for i in range(len(molecule.mo.occsa)):
-        if molecule.mo.occsa[i] - 1 == 0:
-            occupied_ind[0] = occupied_ind[0] + [i]
-        if molecule.mo.occsa[i] == 0:
-            virtual_ind[0] = virtual_ind[0] + [i]
-    for i in range(len(molecule.mo.occsb)):
-        if molecule.mo.occsb[i] - 1 == 0:
-            occupied_ind[1] = occupied_ind[1] + [i + molecule.mo.nbasis]
-        if molecule.mo.occsb[i] == 0:
-            virtual_ind[1] = virtual_ind[1] + [i + molecule.mo.nbasis]
     indices = (occupied_ind, virtual_ind)
     K_size = len(occupied_ind[0]) * len(virtual_ind[0]) + len(occupied_ind[1]) * len(
         virtual_ind[1]
@@ -300,6 +270,14 @@ def test_K_matrices_K_fxc_DFT():
                             K_fxc_DFT[ias][jbt] = K_fxc_DFT[ias][
                                 jbt
                             ] + molgrid.integrate(values)
+    K_fxc_DFT = np.array(
+        [
+            K_fxc_DFT[:70, :70],
+            K_fxc_DFT[:70, 70:],
+            K_fxc_DFT[70:, :70],
+            K_fxc_DFT[70:, 70:],
+        ]
+    )
     assert np.allclose(
         K_mats.K_fxc_DFT(XC_functional="lda_x", molgrid=molgrid), K_fxc_DFT
     )
@@ -328,14 +306,13 @@ def test_K_matrices_K_fxc_DFT():
                         K_fxc_DFT[ffs][jbt] = K_fxc_DFT[ffs][jbt] + molgrid.integrate(
                             values
                         )
-    index = [[4], []]
-    assert np.allclose(
-        K_mats.K_fxc_DFT(
-            shape="line", index=index, XC_functional="lda_x", molgrid=molgrid
-        ),
-        K_fxc_DFT,
+    K_fxc_DFT_0 = K_mats.K_fxc_DFT(
+        shape="line", index=index, XC_functional="lda_x", molgrid=molgrid
     )
-    K_shape = [1, 1]
+    assert np.allclose(K_fxc_DFT_0[0], K_fxc_DFT[0, :70])
+    assert np.allclose(K_fxc_DFT_0[1], K_fxc_DFT[0, 70:])
+    assert np.allclose(K_fxc_DFT_0[2], np.zeros([0, 70]))
+    assert np.allclose(K_fxc_DFT_0[3], np.zeros([0, 70]))
     values = (
         f_xc_values[0]
         * MO_values_conjugated[4]
@@ -465,39 +442,44 @@ def test_K_matrices_raise_K_indices():
 
 def test_K_matrices_raise_K_coulomb():
     with pytest.raises(TypeError) as error:
-        k_coul = K_mats.K_coulomb(conjugate=2)
-    assert str(error.value) == """'conjugate' must be a bool"""
+        k_coul = K_mats.K_coulomb(Type="abc")
+    assert str(error.value) == """'Type' must be 1 or 2"""
+    with pytest.raises(ValueError) as error:
+        k_coul = K_mats.K_coulomb(Type=3)
+    assert str(error.value) == """'Type' must be 1 or 2"""
 
 
 def test_K_matrices_raise_K_fxc_HF():
     with pytest.raises(TypeError) as error:
-        k_fxc_hf = K_mats.K_fxc_HF(conjugate=2)
-    assert str(error.value) == """'conjugate' must be a bool"""
+        k_coul = K_mats.K_coulomb(Type="abc")
+    assert str(error.value) == """'Type' must be 1 or 2"""
+    with pytest.raises(ValueError) as error:
+        k_coul = K_mats.K_coulomb(Type=3)
+    assert str(error.value) == """'Type' must be 1 or 2"""
 
 
 def test_K_matrices_raise_K_fxc_DFT():
     with pytest.raises(TypeError) as error:
-        k_fxc_dft = K_mats.K_fxc_DFT(
-            XC_functional="lda_x", conjugate=2, molgrid=molgrid
-        )
-    assert str(error.value) == """'conjugate' must be a bool"""
+        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional="lda_x", Type="abc", molgrid=molgrid)
+    assert str(error.value) == """'Type' must be 1 or 2"""
+    with pytest.raises(ValueError) as error:
+        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional="lda_x", Type=3, molgrid=molgrid)
+    assert str(error.value) == """'Type' must be 1 or 2"""
     with pytest.raises(TypeError) as error:
-        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional="lda_x", conjugate=False, molgrid=2)
+        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional="lda_x", Type=1, molgrid=2)
     assert str(error.value) == """'molgrid' must be a 'MolGrid' instance"""
     with pytest.raises(TypeError) as error:
-        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional=2, conjugate=False, molgrid=molgrid)
+        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional=2, Type=1, molgrid=molgrid)
     assert str(error.value) == """'XC_functional' must be a str"""
     with pytest.raises(ValueError) as error:
-        k_fxc_dft = K_mats.K_fxc_DFT(
-            XC_functional="abcd", conjugate=False, molgrid=molgrid
-        )
+        k_fxc_dft = K_mats.K_fxc_DFT(XC_functional="abcd", Type=1, molgrid=molgrid)
     assert (
         str(error.value)
         == """"Not suported functionnal, see pylibxc.util.xc_available_functional_names() or the webpage: https://tddft.org/programs/libxc/functionals/"""
     )
     with pytest.raises(ValueError) as error:
         k_fxc_dft = K_mats.K_fxc_DFT(
-            XC_functional="hyb_mgga_xc_pwb6k", conjugate=False, molgrid=molgrid
+            XC_functional="hyb_mgga_xc_pwb6k", Type=1, molgrid=molgrid
         )
     assert (
         str(error.value)
